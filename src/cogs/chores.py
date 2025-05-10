@@ -805,4 +805,7 @@ class ChoresCog(commands.Cog):
 async def setup(bot):
     chores_cog = ChoresCog(bot)
     await bot.add_cog(chores_cog)
-    bot.tree.add_command(chores_cog.chores)
+    try:
+        bot.tree.add_command(chores_cog.chores)
+    except:
+        pass  # Command already registered, skip
