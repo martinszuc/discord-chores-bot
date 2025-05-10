@@ -2,11 +2,20 @@ version: '3.8'
 
 services:
   bot:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: discord-chores-bot:latest
     container_name: discord-chores-bot
     restart: unless-stopped
     volumes:
-      - ./config.json:/app/config.json
+      - ./config.json:/app/config.json:ro
       - ./data:/app/data
     environment:
       - TZ=Europe/Bratislava
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 1m
+      timeout: 10s
+      retries: 3
+      start_period: 10s

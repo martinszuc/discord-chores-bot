@@ -54,10 +54,25 @@ class ChoresBot(commands.Bot):
 
     async def setup_hook(self):
         # Load all cogs
-        await self.load_extension("src.cogs.chores")
-        await self.load_extension("src.cogs.admin")
-        await self.load_extension("src.cogs.help")
-        logger.info("All cogs loaded")
+        try:
+            await self.load_extension("src.cogs.chores")
+            logger.info("Loaded chores cog")
+        except Exception as e:
+            logger.error(f"Failed to load chores cog: {e}")
+
+        try:
+            await self.load_extension("src.cogs.admin")
+            logger.info("Loaded admin cog")
+        except Exception as e:
+            logger.error(f"Failed to load admin cog: {e}")
+
+        try:
+            await self.load_extension("src.cogs.help")
+            logger.info("Loaded help cog")
+        except Exception as e:
+            logger.error(f"Failed to load help cog: {e}")
+
+        logger.info("Cog loading completed")
 
         # Schedule the first chore post
         self.loop.create_task(self.schedule_first_chore_post())

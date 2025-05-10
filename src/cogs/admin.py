@@ -427,4 +427,10 @@ class AdminCog(commands.Cog):
 async def setup(bot):
     admin_cog = AdminCog(bot)
     await bot.add_cog(admin_cog)
-    bot.tree.add_command(admin_cog.choresadmin)
+    try:
+        bot.tree.add_command(admin_cog.choresadmin)
+    except Exception as e:
+        # Command already registered, skip
+        import logging
+        logger = logging.getLogger('chores-bot')
+        logger.warning(f"Skipping command registration: {e}")

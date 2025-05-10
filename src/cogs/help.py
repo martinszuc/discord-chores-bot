@@ -550,4 +550,10 @@ class HelpCog(commands.Cog):
 async def setup(bot):
     help_cog = HelpCog(bot)
     await bot.add_cog(help_cog)
-    bot.tree.add_command(help_cog.choreshelp)
+    try:
+        bot.tree.add_command(help_cog.choreshelp)
+    except Exception as e:
+        # Command already registered, skip
+        import logging
+        logger = logging.getLogger('chores-bot')
+        logger.warning(f"Skipping command registration: {e}")
