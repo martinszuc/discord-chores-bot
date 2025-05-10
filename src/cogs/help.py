@@ -26,6 +26,14 @@ class HelpCog(commands.Cog):
                 await self.help_reactions(interaction)
             elif command == "status":
                 await self.help_status(interaction)
+            elif command == "vacation":
+                await self.help_vacation(interaction)
+            elif command == "statistics":
+                await self.help_statistics(interaction)
+            elif command == "difficulty":
+                await self.help_difficulty(interaction)
+            elif command == "reminders":
+                await self.help_reminders(interaction)
             else:
                 await interaction.response.send_message(f"No help available for command: {command}")
             return
@@ -41,9 +49,10 @@ class HelpCog(commands.Cog):
         # Basic commands
         embed.add_field(
             name="📋 Basic Commands",
-            value=f"`/chores` - Show the current chore schedule\n"
-                  f"`/chores schedule` - Show the current chore schedule\n"
-                  f"`/chores config` - Show the current configuration\n",
+            value=f"`/chores show` - Show the current chore schedule\n"
+                  f"`/chores config` - Show the current configuration\n"
+                  f"`/chores vacation status:True/False` - Enable or disable vacation mode\n"
+                  f"`/chores stats [name]` - Show your statistics or another flatmate's",
             inline=False
         )
 
@@ -51,9 +60,11 @@ class HelpCog(commands.Cog):
         embed.add_field(
             name="⚙️ Admin Commands",
             value=f"`/choresadmin status` - Show bot status\n"
-                  f"`/choresadmin reload_config` - Reload the configuration\n"
-                  f"`/choresadmin test_notification` - Test notification system\n"
-                  f"`/choresadmin settings` - View or edit bot settings\n",
+                  f"`/choresadmin reminders` - Configure reminder settings\n"
+                  f"`/choresadmin test_reminder` - Test the reminder system\n"
+                  f"`/choresadmin stats_summary` - Show statistics for all flatmates\n"
+                  f"`/chores set_difficulty chore:X difficulty:Y` - Set difficulty for chore\n"
+                  f"`/chores vote_difficulty chore:X` - Start a vote on chore difficulty",
             inline=False
         )
 
@@ -70,7 +81,7 @@ class HelpCog(commands.Cog):
         embed.add_field(
             name="📚 More Help",
             value=f"For more detailed help on a specific command, use `/choreshelp show command:command_name`.\n"
-                  f"Available command names: chores, choresadmin, reactions, status",
+                  f"Available command names: chores, choresadmin, reactions, status, vacation, statistics, difficulty, reminders",
             inline=False
         )
 
@@ -87,13 +98,7 @@ class HelpCog(commands.Cog):
 
         # Basic commands
         embed.add_field(
-            name="/chores",
-            value="Show the current chore schedule.",
-            inline=False
-        )
-
-        embed.add_field(
-            name="/chores schedule",
+            name="/chores show",
             value="Show the current chore schedule.",
             inline=False
         )
@@ -129,14 +134,38 @@ class HelpCog(commands.Cog):
         )
 
         embed.add_field(
-            name="/chores add_chore name:chore_name",
-            value="Add a new chore. (Admin only)",
+            name="/chores add_chore name:chore_name difficulty:1-5",
+            value="Add a new chore with optional difficulty level. (Admin only)",
             inline=False
         )
 
         embed.add_field(
             name="/chores remove_chore name:chore_name",
             value="Remove a chore. (Admin only)",
+            inline=False
+        )
+
+        embed.add_field(
+            name="/chores vacation status:True/False",
+            value="Enable or disable vacation mode for yourself.",
+            inline=False
+        )
+
+        embed.add_field(
+            name="/chores stats name:flatmate_name",
+            value="Show statistics for yourself or another flatmate.",
+            inline=False
+        )
+
+        embed.add_field(
+            name="/chores set_difficulty chore:chore_name difficulty:1-5",
+            value="Set the difficulty level for a chore. (Admin only)",
+            inline=False
+        )
+
+        embed.add_field(
+            name="/chores vote_difficulty chore:chore_name",
+            value="Start a vote on the difficulty of a chore.",
             inline=False
         )
 
@@ -168,6 +197,30 @@ class HelpCog(commands.Cog):
             name="/choresadmin test_notification chore:chore_name",
             value="Test the notification system by sending a test message. "
                   "If a chore is specified, it will only test that chore.",
+            inline=False
+        )
+
+        embed.add_field(
+            name="/choresadmin test_reminder",
+            value="Test the reminder system by sending reminders for all pending chores.",
+            inline=False
+        )
+
+        embed.add_field(
+            name="/choresadmin reminders",
+            value="Show the current reminder settings.",
+            inline=False
+        )
+
+        embed.add_field(
+            name="/choresadmin reminders status:True/False day:Day time:HH:MM",
+            value="Configure the reminder system.",
+            inline=False
+        )
+
+        embed.add_field(
+            name="/choresadmin stats_summary",
+            value="Show a summary of statistics for all flatmates.",
             inline=False
         )
 
@@ -243,7 +296,10 @@ class HelpCog(commands.Cog):
                   "- Bot Uptime\n"
                   "- Number of servers the bot is in\n"
                   "- When the chore schedule was last posted\n"
-                  "- Number of chores and flatmates configured",
+                  "- Number of chores and flatmates configured\n"
+                  "- Number of pending and completed chores\n"
+                  "- Number of active flatmates (not on vacation)\n"
+                  "- Current reminder settings",
             inline=False
         )
 
@@ -256,6 +312,171 @@ class HelpCog(commands.Cog):
         embed.add_field(
             name="Permissions",
             value="This command requires administrator permissions or the configured admin role.",
+            inline=False
+        )
+
+        await interaction.response.send_message(embed=embed)
+
+    async def help_vacation(self, interaction: discord.Interaction):
+        """Show help for vacation mode."""
+        embed = discord.Embed(
+            title="🏖️ Vacation Mode Help",
+            description="Vacation mode allows flatmates to be excluded from chore assignments when they are away.",
+            color=discord.Color.blue(),
+            timestamp=datetime.datetime.now()
+        )
+
+        embed.add_field(
+            name="Enabling vacation mode",
+            value="`/chores vacation status:True`\n\n"
+                  "When you enable vacation mode, you will not be assigned any chores in the next schedule generation.",
+            inline=False
+        )
+
+        embed.add_field(
+            name="Disabling vacation mode",
+            value="`/chores vacation status:False`\n\n"
+                  "When you disable vacation mode, you will be included in the next schedule generation.\n"
+                  "Additionally, you will be given higher priority to be assigned chores when you return.",
+            inline=False
+        )
+
+        embed.add_field(
+            name="Checking vacation status",
+            value="Use `/chores config` to see which flatmates are currently on vacation.",
+            inline=False
+        )
+
+        await interaction.response.send_message(embed=embed)
+
+    async def help_statistics(self, interaction: discord.Interaction):
+        """Show help for statistics commands."""
+        embed = discord.Embed(
+            title="📊 Statistics Commands Help",
+            description="Commands for viewing chore completion statistics.",
+            color=discord.Color.blue(),
+            timestamp=datetime.datetime.now()
+        )
+
+        embed.add_field(
+            name="Viewing your own statistics",
+            value="`/chores stats`\n\n"
+                  "Shows your personal statistics including completed chores, reassigned chores, skipped chores, and completion rate.",
+            inline=False
+        )
+
+        embed.add_field(
+            name="Viewing another flatmate's statistics",
+            value="`/chores stats name:flatmate_name`\n\n"
+                  "Shows statistics for the specified flatmate.",
+            inline=False
+        )
+
+        embed.add_field(
+            name="Viewing all flatmates' statistics",
+            value="`/choresadmin stats_summary`\n\n"
+                  "Shows a summary of statistics for all flatmates. This command requires admin permissions.",
+            inline=False
+        )
+
+        embed.add_field(
+            name="How statistics affect chore assignment",
+            value="The bot uses statistics to prioritize chore assignments:\n\n"
+                  "- Flatmates who skip chores often are more likely to be assigned chores\n"
+                  "- Flatmates who complete chores regularly are less likely to be assigned difficult chores\n"
+                  "- Flatmates who just returned from vacation are given priority for easier chores",
+            inline=False
+        )
+
+        await interaction.response.send_message(embed=embed)
+
+    async def help_difficulty(self, interaction: discord.Interaction):
+        """Show help for chore difficulty commands."""
+        embed = discord.Embed(
+            title="⭐ Chore Difficulty Help",
+            description="Commands for managing chore difficulty ratings.",
+            color=discord.Color.blue(),
+            timestamp=datetime.datetime.now()
+        )
+
+        embed.add_field(
+            name="Setting difficulty directly (Admin)",
+            value="`/chores set_difficulty chore:chore_name difficulty:1-5`\n\n"
+                  "Sets the difficulty level for a chore from 1 (easiest) to 5 (hardest).",
+            inline=False
+        )
+
+        embed.add_field(
+            name="Voting on chore difficulty",
+            value="`/chores vote_difficulty chore:chore_name`\n\n"
+                  "Starts a vote where flatmates can react with 1️⃣ to 5️⃣ to indicate how difficult they think the chore is.\n"
+                  "After 5 minutes, the average vote will be used as the new difficulty level.",
+            inline=False
+        )
+
+        embed.add_field(
+            name="Viewing chore difficulties",
+            value="Use `/chores config` to see the difficulty levels for all chores.\n"
+                  "Each ⭐ represents one level of difficulty.",
+            inline=False
+        )
+
+        embed.add_field(
+            name="How difficulty affects assignments",
+            value="Chores are assigned in order of difficulty (highest first) with the bot trying to balance the total difficulty each flatmate receives.",
+            inline=False
+        )
+
+        await interaction.response.send_message(embed=embed)
+
+    async def help_reminders(self, interaction: discord.Interaction):
+        """Show help for reminder commands."""
+        embed = discord.Embed(
+            title="⏰ Reminders Help",
+            description="Commands for managing the chore reminder system.",
+            color=discord.Color.blue(),
+            timestamp=datetime.datetime.now()
+        )
+
+        embed.add_field(
+            name="Viewing reminder settings",
+            value="`/choresadmin reminders`\n\n"
+                  "Shows the current reminder settings including whether reminders are enabled, and when they are sent.",
+            inline=False
+        )
+
+        embed.add_field(
+            name="Enabling/disabling reminders",
+            value="`/choresadmin reminders status:True/False`\n\n"
+                  "Enables or disables the reminder system.",
+            inline=False
+        )
+
+        embed.add_field(
+            name="Changing reminder day",
+            value="`/choresadmin reminders day:DayName`\n\n"
+                  "Sets the day of the week when reminders are sent (e.g., Friday).",
+            inline=False
+        )
+
+        embed.add_field(
+            name="Changing reminder time",
+            value="`/choresadmin reminders time:HH:MM`\n\n"
+                  "Sets the time when reminders are sent in 24-hour format.",
+            inline=False
+        )
+
+        embed.add_field(
+            name="Testing reminders",
+            value="`/choresadmin test_reminder`\n\n"
+                  "Sends test reminders for all pending chores immediately.",
+            inline=False
+        )
+
+        embed.add_field(
+            name="How reminders work",
+            value="The bot will automatically send reminders to flatmates who haven't completed their chores yet.\n"
+                  "By default, reminders are sent on Friday at 18:00.",
             inline=False
         )
 

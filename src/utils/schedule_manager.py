@@ -26,7 +26,8 @@ class ScheduleManager:
                     "last_posted": None,
                     "current_assignments": {},
                     "rotation_indices": {},
-                    "voted_flatmates": []  # Track flatmates who have already voted
+                    "voted_flatmates": [],  # Track flatmates who have already voted
+                    "pending_chores": []  # Track chores that haven't been completed
                 }
                 self._save_schedule_data(default_data)
                 return default_data
@@ -37,7 +38,8 @@ class ScheduleManager:
                 "last_posted": None,
                 "current_assignments": {},
                 "rotation_indices": {},
-                "voted_flatmates": []
+                "voted_flatmates": [],
+                "pending_chores": []
             }
 
     def _save_schedule_data(self, data=None):
@@ -63,11 +65,17 @@ class ScheduleManager:
         self.schedule_data["last_posted"] = datetime.datetime.now().isoformat()
         # Reset voted flatmates when posting a new schedule
         self.schedule_data["voted_flatmates"] = []
+        # Initialize pending chores with all chores
+        self.schedule_data["pending_chores"] = list(self.schedule_data.get("current_assignments", {}).keys())
         self._save_schedule_data()
 
     def get_current_assignments(self):
         """Get the current chore assignments."""
         return self.schedule_data.get("current_assignments", {})
+
+    def get_pending_chores(self):
+        """Get the list of chores that haven't been completed yet."""
+        return self.schedule_data.get("pending_chores", [])
 
     def get_assignment_for_chore(self, chore):
         """Get the flatmate assigned to a specific chore."""
@@ -90,34 +98,85 @@ class ScheduleManager:
         """Get list of flatmates who have already voted."""
         return self.schedule_data.get("voted_flatmates", [])
 
+    def calculate_priority_score(self, flatmate):
+        """Calculate a priority score for a flatmate based on their stats.
+        Lower score means higher priority to be assigned a chore.
+        """
+        stats = self.config_manager.get_flatmate_stats(flatmate["name"])
+        if not stats:
+            return 0
+
+        # Calculate score - give higher priority to those who complete chores
+        # and lower priority to those who skip or get reassigned
+        score = stats["skipped"] * 2 + stats["reassigned"] - stats["completed"] * 0.5
+
+        # If flatmate recently returned from vacation, give them higher priority
+        if flatmate.get("recently_returned", False):
+            score -= 5
+
+        return score
+
     def generate_new_schedule(self):
-        """Generate a new chore schedule."""
-        flatmates = self.config_manager.get_flatmates()
+        """Generate a new chore schedule using the priority system and difficulty balancing."""
+        flatmates = self.config_manager.get_active_flatmates()
         chores = self.config_manager.get_chores()
 
         if not flatmates or not chores:
             logger.warning("Cannot generate schedule: No flatmates or no chores defined")
             return {}
 
+        # Reset 'recently_returned' flag for all flatmates in next iteration
+        for flatmate in self.config_manager.get_flatmates():
+            if flatmate.get("recently_returned", False):
+                flatmate["recently_returned"] = False
+
+        self.config_manager.save_config()
+
+        # Sort chores by difficulty (highest first)
+        sorted_chores = sorted(
+            chores,
+            key=lambda c: self.config_manager.get_chore_details(c).get("difficulty", 1),
+            reverse=True
+        )
+
+        # Calculate priority scores for flatmates
+        flatmates_with_scores = [
+            (f, self.calculate_priority_score(f)) for f in flatmates
+        ]
+
+        # Sort flatmates by priority score (lowest first = highest priority)
+        sorted_flatmates = [f for f, _ in sorted(
+            flatmates_with_scores,
+            key=lambda item: item[1]
+        )]
+
+        # Assign chores, starting with the most difficult chores
         new_assignments = {}
-        for chore in chores:
-            # Get or initialize rotation index for this chore
-            if "rotation_indices" not in self.schedule_data:
-                self.schedule_data["rotation_indices"] = {}
+        flatmate_difficulty_sum = {f["name"]: 0 for f in flatmates}
 
-            rotation_idx = self.get_rotation_index(chore)
+        for chore in sorted_chores:
+            # Get difficulty of this chore
+            chore_difficulty = self.config_manager.get_chore_details(chore).get("difficulty", 1)
 
-            # Assign chore to flatmate based on rotation index
-            assigned_flatmate = flatmates[rotation_idx % len(flatmates)]
+            # Find flatmate with lowest total difficulty so far
+            sorted_by_load = sorted(
+                sorted_flatmates,
+                key=lambda f: flatmate_difficulty_sum[f["name"]]
+            )
+
+            # Assign to flatmate with lowest load
+            assigned_flatmate = sorted_by_load[0]
             new_assignments[chore] = assigned_flatmate["name"]
 
-            # Update rotation index for next time
-            self.schedule_data["rotation_indices"][chore] = (rotation_idx + 1) % len(flatmates)
+            # Update their total difficulty
+            flatmate_difficulty_sum[assigned_flatmate["name"]] += chore_difficulty
 
         # Save new assignments
         self.schedule_data["current_assignments"] = new_assignments
         # Reset voted flatmates list for the new schedule
         self.schedule_data["voted_flatmates"] = []
+        # Initialize pending chores with all chores
+        self.schedule_data["pending_chores"] = list(new_assignments.keys())
         self._save_schedule_data()
 
         return new_assignments
@@ -134,7 +193,7 @@ class ScheduleManager:
         Returns:
             str or None: Name of the flatmate the chore was reassigned to, or None if reassignment failed
         """
-        flatmates = self.config_manager.get_flatmates()
+        flatmates = self.config_manager.get_active_flatmates()
         if not flatmates:
             logger.warning("Cannot reassign: No flatmates defined")
             return None
@@ -148,7 +207,7 @@ class ScheduleManager:
         # Get flatmates who haven't voted this week
         voted_flatmates = self.get_voted_flatmates()
 
-        # Eligible flatmates: not the current assignee and hasn't voted yet
+        # Eligible flatmates: not the current assignee, not on vacation, and hasn't voted yet
         eligible_flatmates = [
             f for f in flatmates
             if f["name"] != excluding_flatmate and f["name"] not in voted_flatmates
@@ -163,6 +222,9 @@ class ScheduleManager:
             logger.warning("No eligible flatmates for reassignment")
             return None
 
+        # Update statistics for the original flatmate
+        self.config_manager.update_flatmate_stats(excluding_flatmate, "skipped")
+
         # Randomly select a flatmate
         next_flatmate = random.choice(eligible_flatmates)
 
@@ -172,40 +234,9 @@ class ScheduleManager:
         # Mark the new flatmate as having "voted" (been assigned a task)
         self.add_voted_flatmate(next_flatmate["name"])
 
-        self._save_schedule_data()
+        # Update statistics for the new flatmate
+        self.config_manager.update_flatmate_stats(next_flatmate["name"], "reassigned")
 
-        return next_flatmate["name"]
-
-    def rotate_assignment(self, chore):
-        """Rotate the assignment for a specific chore to the next flatmate."""
-        flatmates = self.config_manager.get_flatmates()
-        if not flatmates:
-            logger.warning("Cannot rotate assignment: No flatmates defined")
-            return None
-
-        # Get current assignment
-        current_assignment = self.get_assignment_for_chore(chore)
-        if not current_assignment:
-            logger.warning(f"No current assignment for chore: {chore}")
-            return None
-
-        # Find current flatmate index
-        current_idx = -1
-        for i, flatmate in enumerate(flatmates):
-            if flatmate["name"] == current_assignment:
-                current_idx = i
-                break
-
-        if current_idx == -1:
-            logger.warning(f"Current assigned flatmate not found: {current_assignment}")
-            return None
-
-        # Find next flatmate
-        next_idx = (current_idx + 1) % len(flatmates)
-        next_flatmate = flatmates[next_idx]
-
-        # Update assignment
-        self.schedule_data["current_assignments"][chore] = next_flatmate["name"]
         self._save_schedule_data()
 
         return next_flatmate["name"]
@@ -220,11 +251,21 @@ class ScheduleManager:
         if current_assignment != flatmate_name:
             return False, f"Chore is assigned to {current_assignment}, not {flatmate_name}"
 
+        # Remove from pending chores
+        if "pending_chores" not in self.schedule_data:
+            self.schedule_data["pending_chores"] = []
+
+        if chore in self.schedule_data["pending_chores"]:
+            self.schedule_data["pending_chores"].remove(chore)
+
         # Mark flatmate as having voted
         self.add_voted_flatmate(flatmate_name)
 
-        # Record completion (could be expanded to track completion history)
-        # For now, we'll just return success
+        # Update statistics
+        self.config_manager.update_flatmate_stats(flatmate_name, "completed")
+
+        self._save_schedule_data()
+
         return True, f"Chore '{chore}' marked as completed by {flatmate_name}"
 
     def reset_schedule(self):
@@ -233,7 +274,8 @@ class ScheduleManager:
             "last_posted": None,
             "current_assignments": {},
             "rotation_indices": {},
-            "voted_flatmates": []
+            "voted_flatmates": [],
+            "pending_chores": []
         }
         self._save_schedule_data()
         return True, "Schedule has been reset"

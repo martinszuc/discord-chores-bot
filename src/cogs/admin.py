@@ -54,11 +54,33 @@ class AdminCog(commands.Cog):
             last_posted = schedule_manager.get_last_posted_date()
             last_posted_str = "Never" if not last_posted else last_posted
 
+            # Get count of active flatmates (not on vacation)
+            active_flatmates = chores_cog.config_manager.get_active_flatmates()
+            total_flatmates = chores_cog.config_manager.get_flatmates()
+
+            # Get pending chores
+            pending_chores = schedule_manager.get_pending_chores()
+            pending_count = len(pending_chores)
+            total_chores = len(self.config.get('chores', []))
+            completed_count = total_chores - pending_count
+
             embed.add_field(
                 name="📊 Schedule Info",
                 value=f"Last Posted: {last_posted_str}\n"
-                      f"Chores: {len(self.config.get('chores', []))}\n"
-                      f"Flatmates: {len(self.config.get('flatmates', []))}",
+                      f"Chores: {total_chores} (Completed: {completed_count}, Pending: {pending_count})\n"
+                      f"Flatmates: {len(total_flatmates)} (Active: {len(active_flatmates)})",
+                inline=False
+            )
+
+            # Add reminder status
+            reminder_settings = chores_cog.config_manager.get_reminder_settings()
+            reminder_status = "Enabled" if reminder_settings.get("enabled", True) else "Disabled"
+
+            embed.add_field(
+                name="⏰ Reminder Settings",
+                value=f"Status: {reminder_status}\n"
+                      f"Day: {reminder_settings.get('day', 'Friday')}\n"
+                      f"Time: {reminder_settings.get('time', '18:00')}",
                 inline=False
             )
 
@@ -141,6 +163,98 @@ class AdminCog(commands.Cog):
                 await message.add_reaction(emojis["completed"])
                 await message.add_reaction(emojis["unavailable"])
 
+    @choresadmin.command(name="test_reminder")
+    async def test_reminder(self, interaction: discord.Interaction):
+        """Test the reminder system by sending reminders for all pending chores."""
+        chores_cog = self.bot.get_cog("ChoresCog")
+        if not chores_cog:
+            await interaction.response.send_message("❌ Chores cog not found.")
+            return
+
+        await interaction.response.send_message("Sending test reminders...")
+        await chores_cog.send_reminders(interaction.channel)
+
+    @choresadmin.command(name="reminders")
+    @app_commands.describe(
+        status="Enable or disable reminders",
+        day="Day to send reminders (optional)",
+        time="Time to send reminders (HH:MM) (optional)"
+    )
+    async def configure_reminders(self, interaction: discord.Interaction, status: bool = None,
+                                  day: str = None, time: str = None):
+        """Configure the reminder system."""
+        chores_cog = self.bot.get_cog("ChoresCog")
+        if not chores_cog:
+            await interaction.response.send_message("❌ Chores cog not found.")
+            return
+
+        # If no parameters provided, show current settings
+        if status is None and day is None and time is None:
+            reminder_settings = chores_cog.config_manager.get_reminder_settings()
+            reminder_status = "Enabled" if reminder_settings.get("enabled", True) else "Disabled"
+
+            embed = discord.Embed(
+                title="⏰ Reminder Settings",
+                color=discord.Color.blue(),
+                timestamp=datetime.datetime.now()
+            )
+
+            embed.add_field(
+                name="Current Settings",
+                value=f"Status: {reminder_status}\n"
+                      f"Day: {reminder_settings.get('day', 'Friday')}\n"
+                      f"Time: {reminder_settings.get('time', '18:00')}",
+                inline=False
+            )
+
+            embed.add_field(
+                name="Usage",
+                value=f"To update settings, use:\n"
+                      f"`/choresadmin reminders status:True/False day:Day time:HH:MM`",
+                inline=False
+            )
+
+            await interaction.response.send_message(embed=embed)
+            return
+
+        # Validate day if provided
+        if day is not None:
+            valid_days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+            if day not in valid_days:
+                await interaction.response.send_message(f"❌ Invalid day. Must be one of: {', '.join(valid_days)}")
+                return
+
+        # Validate time if provided
+        if time is not None:
+            import re
+            if not re.match(r'^([01]\d|2[0-3]):([0-5]\d)$', time):
+                await interaction.response.send_message("❌ Invalid time format. Must be in 24-hour format (HH:MM).")
+                return
+
+        # Update reminder settings
+        success, message = chores_cog.config_manager.update_reminder_settings(
+            enabled=status,
+            day=day,
+            time=time
+        )
+
+        if success:
+            reminder_settings = chores_cog.config_manager.get_reminder_settings()
+            if status is not None:
+                if status:
+                    await interaction.response.send_message(
+                        BotStrings.REMINDER_ENABLED.format(
+                            day=reminder_settings.get('day', 'Friday'),
+                            time=reminder_settings.get('time', '11:00')
+                        )
+                    )
+                else:
+                    await interaction.response.send_message(BotStrings.REMINDER_DISABLED)
+            else:
+                await interaction.response.send_message(BotStrings.REMINDER_SETTINGS_UPDATED)
+        else:
+            await interaction.response.send_message(f"❌ Failed to update reminder settings: {message}")
+
     @choresadmin.command(name="settings")
     @app_commands.describe(
         setting="The setting to view or update (optional)",
@@ -172,6 +286,20 @@ class AdminCog(commands.Cog):
                 value=f"posting_day: {self.config.get('posting_day', 'Monday')}\n"
                       f"posting_time: {self.config.get('posting_time', '9:00')}\n"
                       f"timezone: {self.config.get('timezone', 'UTC')}",
+                inline=False
+            )
+
+            # Add reminder settings
+            reminder_settings = self.config.get('reminders', {
+                'enabled': True,
+                'day': 'Friday',
+                'time': '18:00'
+            })
+            embed.add_field(
+                name="Reminder Settings",
+                value=f"reminders.enabled: {reminder_settings.get('enabled', True)}\n"
+                      f"reminders.day: {reminder_settings.get('day', 'Friday')}\n"
+                      f"reminders.time: {reminder_settings.get('time', '18:00')}",
                 inline=False
             )
 
@@ -251,6 +379,49 @@ class AdminCog(commands.Cog):
         except Exception as e:
             logger.error(f"Failed to update setting: {e}")
             await interaction.response.send_message(BotStrings.ADMIN_CONFIG_FAILED.format(error=e))
+
+    @choresadmin.command(name="stats_summary")
+    async def stats_summary(self, interaction: discord.Interaction):
+        """Show a summary of stats for all flatmates."""
+        chores_cog = self.bot.get_cog("ChoresCog")
+        if not chores_cog:
+            await interaction.response.send_message("❌ Chores cog not found.")
+            return
+
+        # Get all flatmates
+        flatmates = chores_cog.config_manager.get_flatmates()
+
+        embed = discord.Embed(
+            title="📊 Statistics Summary",
+            color=discord.Color.blue(),
+            timestamp=datetime.datetime.now()
+        )
+
+        for flatmate in flatmates:
+            stats = chores_cog.config_manager.get_flatmate_stats(flatmate["name"])
+            if not stats:
+                continue
+
+            # Calculate completion rate
+            total_chores = stats["completed"] + stats["skipped"]
+            completion_rate = 0
+            if total_chores > 0:
+                completion_rate = round((stats["completed"] / total_chores) * 100, 1)
+
+            # Add field for this flatmate
+            embed.add_field(
+                name=flatmate["name"],
+                value=f"Completed: {stats['completed']}\n"
+                      f"Reassigned: {stats['reassigned']}\n"
+                      f"Skipped: {stats['skipped']}\n"
+                      f"Completion Rate: {completion_rate}%",
+                inline=True
+            )
+
+        if len(embed.fields) == 0:
+            embed.description = "No statistics available yet."
+
+        await interaction.response.send_message(embed=embed)
 
 
 async def setup(bot):

@@ -48,6 +48,10 @@ class ConfigManager:
         """Get the list of flatmates."""
         return self.config.get("flatmates", [])
 
+    def get_active_flatmates(self):
+        """Get the list of flatmates who are not on vacation."""
+        return [f for f in self.get_flatmates() if not f.get("on_vacation", False)]
+
     def get_flatmate_by_name(self, name):
         """Get a flatmate by name."""
         for flatmate in self.get_flatmates():
@@ -72,7 +76,13 @@ class ConfigManager:
 
         self.config["flatmates"].append({
             "name": name,
-            "discord_id": discord_id
+            "discord_id": discord_id,
+            "on_vacation": False,
+            "stats": {
+                "completed": 0,
+                "reassigned": 0,
+                "skipped": 0
+            }
         })
         self.save_config()
         return True, "Flatmate added successfully"
@@ -87,27 +97,115 @@ class ConfigManager:
         self.save_config()
         return True, "Flatmate removed successfully"
 
+    def set_flatmate_vacation(self, name, status):
+        """Set the vacation status of a flatmate."""
+        flatmate = self.get_flatmate_by_name(name)
+        if not flatmate:
+            return False, "Flatmate not found"
+
+        flatmate["on_vacation"] = status
+        self.save_config()
+        return True, f"Vacation status for {name} set to {status}"
+
+    def update_flatmate_stats(self, name, stat_type, increment=1):
+        """Update statistics for a flatmate."""
+        flatmate = self.get_flatmate_by_name(name)
+        if not flatmate:
+            return False, "Flatmate not found"
+
+        if "stats" not in flatmate:
+            flatmate["stats"] = {
+                "completed": 0,
+                "reassigned": 0,
+                "skipped": 0
+            }
+
+        if stat_type in flatmate["stats"]:
+            flatmate["stats"][stat_type] += increment
+            self.save_config()
+            return True, f"Statistics updated for {name}"
+        else:
+            return False, f"Unknown statistic type: {stat_type}"
+
+    def get_flatmate_stats(self, name):
+        """Get statistics for a flatmate."""
+        flatmate = self.get_flatmate_by_name(name)
+        if not flatmate:
+            return None
+
+        if "stats" not in flatmate:
+            flatmate["stats"] = {
+                "completed": 0,
+                "reassigned": 0,
+                "skipped": 0
+            }
+            self.save_config()
+
+        return flatmate["stats"]
+
     def get_chores(self):
         """Get the list of chores."""
         return self.config.get("chores", [])
 
-    def add_chore(self, chore_name):
+    def get_chore_details(self, chore_name):
+        """Get details of a specific chore."""
+        chores_with_details = self.config.get("chores_details", {})
+        if chore_name in chores_with_details:
+            return chores_with_details[chore_name]
+        return {"difficulty": 1}  # Default difficulty
+
+    def add_chore(self, chore_name, difficulty=1):
         """Add a new chore."""
-        if chore_name in self.get_chores():
+        chores = self.get_chores()
+        if chore_name in chores:
             return False, "Chore already exists"
 
-        self.config["chores"].append(chore_name)
+        chores.append(chore_name)
+        self.config["chores"] = chores
+
+        # Initialize chore details
+        if "chores_details" not in self.config:
+            self.config["chores_details"] = {}
+
+        self.config["chores_details"][chore_name] = {
+            "difficulty": difficulty
+        }
+
         self.save_config()
         return True, "Chore added successfully"
 
     def remove_chore(self, chore_name):
         """Remove a chore."""
+        chores = self.get_chores()
+        if chore_name not in chores:
+            return False, "Chore not found"
+
+        chores.remove(chore_name)
+        self.config["chores"] = chores
+
+        # Remove from details if exists
+        if "chores_details" in self.config and chore_name in self.config["chores_details"]:
+            del self.config["chores_details"][chore_name]
+
+        self.save_config()
+        return True, "Chore removed successfully"
+
+    def set_chore_difficulty(self, chore_name, difficulty):
+        """Set the difficulty level for a chore."""
         if chore_name not in self.get_chores():
             return False, "Chore not found"
 
-        self.config["chores"].remove(chore_name)
+        # Initialize chores_details if not exists
+        if "chores_details" not in self.config:
+            self.config["chores_details"] = {}
+
+        # Initialize chore details if not exists
+        if chore_name not in self.config["chores_details"]:
+            self.config["chores_details"][chore_name] = {}
+
+        self.config["chores_details"][chore_name]["difficulty"] = difficulty
         self.save_config()
-        return True, "Chore removed successfully"
+        return True, f"Difficulty for {chore_name} set to {difficulty}"
 
     def get_posting_schedule(self):
         """Get the posting day and time."""
@@ -117,11 +215,49 @@ class ConfigManager:
             "timezone": self.config.get("timezone", "UTC")
         }
 
+    def get_reminder_settings(self):
+        """Get reminder settings."""
+        if "reminders" not in self.config:
+            self.config["reminders"] = {
+                "enabled": True,
+                "day": "Friday",
+                "time": "18:00"
+            }
+            self.save_config()
+
+        return self.config["reminders"]
+
+    def update_reminder_settings(self, enabled=None, day=None, time=None):
+        """Update reminder settings."""
+        if "reminders" not in self.config:
+            self.config["reminders"] = {
+                "enabled": True,
+                "day": "Friday",
+                "time": "18:00"
+            }
+
+        if enabled is not None:
+            self.config["reminders"]["enabled"] = enabled
+
+        if day is not None:
+            self.config["reminders"]["day"] = day
+
+        if time is not None:
+            self.config["reminders"]["time"] = time
+
+        self.save_config()
+        return True, "Reminder settings updated"
+
     def get_emoji(self):
         """Get the emoji configuration."""
         return self.config.get("emoji", {
             "completed": "✅",
-            "unavailable": "❌"
+            "unavailable": "❌",
+            "difficulty_1": "1️⃣",
+            "difficulty_2": "2️⃣",
+            "difficulty_3": "3️⃣",
+            "difficulty_4": "4️⃣",
+            "difficulty_5": "5️⃣"
         })
 
     def get_schedule_data_file(self):

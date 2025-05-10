@@ -62,6 +62,9 @@ class ChoresBot(commands.Bot):
         # Schedule the first chore post
         self.loop.create_task(self.schedule_first_chore_post())
 
+        # Schedule the first reminder
+        self.loop.create_task(self.schedule_first_reminder())
+
         # Sync slash commands with Discord
         try:
             synced = await self.tree.sync()
@@ -130,6 +133,84 @@ class ChoresBot(commands.Bot):
 
         except Exception as e:
             logger.error(f"Error in schedule_first_chore_post: {e}")
+
+    async def schedule_first_reminder(self):
+        """Schedule the first reminder based on the configured reminder settings."""
+        try:
+            # Get the chores cog
+            chores_cog = self.get_cog("ChoresCog")
+            if not chores_cog:
+                logger.error("Chores cog not found")
+                return
+
+            # Get reminder settings
+            reminder_settings = chores_cog.config_manager.get_reminder_settings()
+            if not reminder_settings.get("enabled", True):
+                logger.info("Reminders are disabled, not scheduling")
+                return
+
+            # Get the configured day and time
+            day_name = reminder_settings.get("day", "Friday")
+            time_str = reminder_settings.get("time", "18:00")
+            timezone = pytz.timezone(self.config["timezone"])
+
+            # Calculate when the next reminder should occur
+            now = datetime.datetime.now(timezone)
+            days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+            target_day_idx = days.index(day_name)
+            current_day_idx = now.weekday()
+
+            # Calculate days until next reminder
+            days_until = (target_day_idx - current_day_idx) % 7
+            if days_until == 0 and now.strftime('%H:%M') > time_str:
+                days_until = 7
+
+            # Parse the reminder time
+            hour, minute = map(int, time_str.split(':'))
+
+            # Calculate the next reminder time
+            next_reminder = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            next_reminder = next_reminder + datetime.timedelta(days=days_until)
+
+            # Calculate seconds until next reminder
+            seconds_until = (next_reminder - now).total_seconds()
+
+            logger.info(f"Next reminder scheduled for {next_reminder.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+            logger.info(f"Waiting {seconds_until:.2f} seconds")
+
+            # Schedule the first reminder
+            await asyncio.sleep(seconds_until)
+
+            # Get the chores channel
+            channel_id = self.config["chores_channel_id"]
+            channel = self.get_channel(channel_id)
+
+            if channel:
+                await chores_cog.send_reminders(channel)
+            else:
+                logger.error(f"Chores channel not found: {channel_id}")
+
+            # Schedule weekly reminders
+            while True:
+                await asyncio.sleep(7 * 24 * 60 * 60)  # Wait one week
+
+                # Check if reminders are still enabled
+                reminder_settings = chores_cog.config_manager.get_reminder_settings()
+                if not reminder_settings.get("enabled", True):
+                    logger.info("Reminders are now disabled, stopping reminder schedule")
+                    return
+
+                # Get the chores channel
+                channel_id = self.config["chores_channel_id"]
+                channel = self.get_channel(channel_id)
+
+                if channel:
+                    await chores_cog.send_reminders(channel)
+                else:
+                    logger.error(f"Chores channel not found: {channel_id}")
+
+        except Exception as e:
+            logger.error(f"Error in schedule_first_reminder: {e}")
 
 
 async def main():

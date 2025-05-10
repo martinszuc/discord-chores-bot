@@ -66,3 +66,28 @@ class BotStrings:
     SETTING_INVALID = "❌ Invalid setting: {setting}. Valid settings are: {valid_settings}"
     SETTING_INVALID_VALUE = "❌ Invalid value for {setting}. {reason}"
     SETTING_CURRENT = "Current value of `{setting}`: `{value}`"
+
+    # Vacation mode
+    VACATION_ENABLED = "✅ {name} is now on vacation and will be excluded from chore assignments."
+    VACATION_DISABLED = "✅ {name} is no longer on vacation and will be included in chore assignments."
+
+    # Statistics
+    STATS_HEADER = "📊 **Statistics for {name}** 📊"
+    STATS_COMPLETED = "Completed: {count} chores"
+    STATS_REASSIGNED = "Reassigned to: {count} chores"
+    STATS_SKIPPED = "Skipped: {count} chores"
+    STATS_COMPLETION_RATE = "Completion Rate: {rate}%"
+
+    # Reminders
+    REMINDER_HEADER = "⏰ **Chore Reminder** ⏰"
+    REMINDER_MESSAGE = "Hey {mention}, don't forget to complete your chore: **{chore}**"
+    REMINDER_SETTINGS_UPDATED = "✅ Reminder settings updated successfully."
+    REMINDER_ENABLED = "Reminders are now enabled on {day} at {time}."
+    REMINDER_DISABLED = "Reminders are now disabled."
+
+    # Difficulty ratings
+    DIFFICULTY_SET = "✅ Difficulty for **{chore}** set to {level}/5."
+    DIFFICULTY_VOTE_HEADER = "🗳️ **Vote for Chore Difficulty** 🗳️"
+    DIFFICULTY_VOTE_INSTRUCTIONS = "React with the number that represents how difficult you think **{chore}** is:"
+    DIFFICULTY_VOTE_SCALE = "1️⃣ = Very Easy, 5️⃣ = Very Hard"
+    DIFFICULTY_VOTE_RESULT = "The difficulty of **{chore}** has been set to {level}/5 based on votes."
