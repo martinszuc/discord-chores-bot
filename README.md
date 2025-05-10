@@ -10,6 +10,11 @@ A Discord bot designed to manage and track chores for flatmates sharing an apart
 - 🛠️ Easy configuration for flatmates and chores
 - 🔐 Role-based permissions
 - 🐳 Docker and Docker Compose support for easy deployment
+- 📊 Statistics tracking for each flatmate
+- ⭐ Chore difficulty ratings and balancing
+- 🏖️ Vacation mode
+- ⏰ Customizable reminders for pending chores
+- 🔄 Next week planning and exclusions
 
 ## Requirements
 
@@ -59,7 +64,7 @@ A Discord bot designed to manage and track chores for flatmates sharing an apart
 
 ## Configuration
 
-Edit the `config.json` file to configure your bot:
+Edit the `config.json` file to configure your bot. The example below shows the basic structure:
 
 ```json
 {
@@ -75,7 +80,7 @@ Edit the `config.json` file to configure your bot:
       "name": "Dominik",
       "discord_id": 123456789012345678
     },
-    ...
+    "..."
   ],
   "chores": [
     "Kupelka",
@@ -87,22 +92,105 @@ Edit the `config.json` file to configure your bot:
 }
 ```
 
+See `config.example.json` for a fully documented configuration example.
+
 ## Commands
 
-- `!chores help` - Display help information
-- `!chores schedule` - Show the current chore schedule
-- `!chores next` - Post the next chore schedule immediately
-- `!chores reset` - Reset the chore rotation
-- `!chores config` - Show the current configuration
-- `!chores add_flatmate <name> <discord_id>` - Add a new flatmate (admin only)
-- `!chores remove_flatmate <name>` - Remove a flatmate (admin only)
-- `!chores add_chore <chore_name>` - Add a new chore (admin only)
-- `!chores remove_chore <chore_name>` - Remove a chore (admin only)
+### Basic Commands
+- `/chores show` - Show the current chore schedule
+- `/chores config` - Show the current configuration
+- `/chores vacation status:True/False [user:@user]` - Enable/disable vacation mode
+- `/chores next_week` - Plan who will be included in next week's rotation
+- `/chores stats [name]` - Show statistics for a flatmate
+
+### Admin Commands
+- `/choresadmin status` - Show bot status
+- `/choresadmin reload_config` - Reload the bot configuration
+- `/choresadmin reminders` - Configure reminder settings
+- `/choresadmin test_reminder` - Test the reminder system
+- `/choresadmin test_notification [chore]` - Test the notification system
+- `/choresadmin stats_summary` - Show statistics for all flatmates
+- `/choresadmin settings` - View or edit bot settings
+
+### Flatmate Management
+- `/chores add_flatmate name:name discord_id:id` - Add a new flatmate
+- `/chores remove_flatmate name:name` - Remove a flatmate
+
+### Chore Management
+- `/chores add_chore name:chore_name difficulty:1-5` - Add a new chore
+- `/chores remove_chore name:chore_name` - Remove a chore
+- `/chores set_difficulty chore:chore_name difficulty:1-5` - Set chore difficulty
+- `/chores vote_difficulty chore:chore_name` - Start a vote on chore difficulty
+
+### Help Commands
+- `/choreshelp show` - Display general help information
+- `/choreshelp show command:command_name` - Display help for a specific command
 
 ## Emoji Reactions
 
 - ✅ - Mark a chore as completed
 - ❌ - Indicate you cannot complete a chore (will be reassigned)
+- 1️⃣-5️⃣ - Vote on chore difficulty (when voting is active)
+
+## Advanced Features
+
+### Chore Difficulty and Assignment Balancing
+
+Chores can have difficulty ratings from 1 to 5 stars. The bot uses these ratings to balance the workload when assigning chores:
+
+1. Chores are assigned in order of difficulty (highest first)
+2. The flatmate with the lowest total difficulty so far gets assigned the next chore
+3. Flatmates who skip chores often get higher priority for future assignments
+4. Flatmates who recently returned from vacation get priority for easier chores
+
+### Vacation Mode
+
+Flatmates can enable vacation mode to be excluded from chore assignments:
+
+- Use `/chores vacation status:True` to enable vacation mode
+- Use `/chores vacation status:False` to disable vacation mode
+- When returning from vacation, flatmates get a boost in priority for easier chores
+
+### Next Week Planning
+
+The `/chores next_week` command allows you to plan who will be included in the next chore rotation:
+
+1. A message with all active flatmates will be displayed
+2. React with the number emoji next to a flatmate to toggle their inclusion/exclusion
+3. Exclusions are temporary and will be cleared after the next schedule is generated
+
+### Automated Reminders
+
+The bot can send automatic reminders for pending chores:
+
+- Configure reminder settings with `/choresadmin reminders`
+- Set the day and time when reminders should be sent
+- Flatmates will be reminded of chores they haven't completed yet
+
+### Viewing Logs
+
+If you're running with Docker:
+
+```bash
+docker logs -f discord-chores-bot
+```
+
+If you're running directly with Python:
+
+```bash
+tail -f bot.log
+```
+
+## Development
+
+To contribute to this project:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Make your changes
+4. Commit your changes (`git commit -m 'Add some amazing feature'`)
+5. Push to the branch (`git push origin feature/amazing-feature`)
+6. Open a Pull Request
 
 ## License
 

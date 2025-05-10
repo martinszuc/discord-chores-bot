@@ -2,13 +2,18 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 import datetime
+import logging
 from src.utils.strings import BotStrings
+
+logger = logging.getLogger('chores-bot')
 
 
 class HelpCog(commands.Cog):
     def __init__(self, bot):
+        logger.info("Initializing HelpCog")
         self.bot = bot
         self.config = bot.config
+        logger.debug("HelpCog initialized successfully")
 
     choreshelp = app_commands.Group(name="choreshelp", description="Help commands for the chores bot")
 
@@ -16,8 +21,11 @@ class HelpCog(commands.Cog):
     @app_commands.describe(command="The specific command to get help with (optional)")
     async def help_command(self, interaction: discord.Interaction, command: str = None):
         """Show help information for the bot."""
+        logger.info(f"Help command invoked by {interaction.user.name} (ID: {interaction.user.id}), command: {command}")
+
         if command:
             # Call the appropriate help function based on the command parameter
+            logger.debug(f"Help requested for specific command: {command}")
             if command == "chores":
                 await self.help_chores(interaction)
             elif command == "choresadmin":
@@ -37,10 +45,12 @@ class HelpCog(commands.Cog):
             elif command == "next_week":
                 await self.help_next_week(interaction)
             else:
+                logger.warning(f"Help requested for unknown command: {command}")
                 await interaction.response.send_message(f"No help available for command: {command}")
             return
 
         # General help
+        logger.debug("Showing general help information")
         embed = discord.Embed(
             title="🤖 Chores Bot Help",
             description=f"Welcome to the Chores Bot! Here's how to use me:",
@@ -89,9 +99,12 @@ class HelpCog(commands.Cog):
         )
 
         await interaction.response.send_message(embed=embed)
+        logger.info("General help information displayed")
 
     async def help_chores(self, interaction: discord.Interaction):
         """Show help for chores commands."""
+        logger.info(f"Chores help requested by {interaction.user.name} (ID: {interaction.user.id})")
+
         embed = discord.Embed(
             title="📋 Chores Commands Help",
             description="Commands for managing chores and the chore schedule.",
@@ -179,9 +192,12 @@ class HelpCog(commands.Cog):
         )
 
         await interaction.response.send_message(embed=embed)
+        logger.info("Chores commands help displayed")
 
     async def help_admin(self, interaction: discord.Interaction):
         """Show help for admin commands."""
+        logger.info(f"Admin help requested by {interaction.user.name} (ID: {interaction.user.id})")
+
         embed = discord.Embed(
             title="⚙️ Admin Commands Help",
             description="Administrative commands for managing the bot.",
@@ -252,10 +268,14 @@ class HelpCog(commands.Cog):
         )
 
         await interaction.response.send_message(embed=embed)
+        logger.info("Admin commands help displayed")
 
     async def help_reactions(self, interaction: discord.Interaction):
         """Show help for reaction usage."""
+        logger.info(f"Reactions help requested by {interaction.user.name} (ID: {interaction.user.id})")
+
         emojis = self.config.get("emoji", {"completed": "✅", "unavailable": "❌"})
+        logger.debug(f"Using emojis: {emojis}")
 
         embed = discord.Embed(
             title="👍 Reaction Usage Help",
@@ -289,9 +309,12 @@ class HelpCog(commands.Cog):
         )
 
         await interaction.response.send_message(embed=embed)
+        logger.info("Reactions help displayed")
 
     async def help_status(self, interaction: discord.Interaction):
         """Show help for the status command."""
+        logger.info(f"Status help requested by {interaction.user.name} (ID: {interaction.user.id})")
+
         embed = discord.Embed(
             title="📊 Status Command Help",
             description="The `/choresadmin status` command displays information about the bot's current state.",
@@ -325,9 +348,12 @@ class HelpCog(commands.Cog):
         )
 
         await interaction.response.send_message(embed=embed)
+        logger.info("Status help displayed")
 
     async def help_vacation(self, interaction: discord.Interaction):
         """Show help for vacation mode."""
+        logger.info(f"Vacation help requested by {interaction.user.name} (ID: {interaction.user.id})")
+
         embed = discord.Embed(
             title="🏖️ Vacation Mode Help",
             description="Vacation mode allows flatmates to be excluded from chore assignments when they are away.",
@@ -372,9 +398,12 @@ class HelpCog(commands.Cog):
         )
 
         await interaction.response.send_message(embed=embed)
+        logger.info("Vacation help displayed")
 
     async def help_statistics(self, interaction: discord.Interaction):
         """Show help for statistics commands."""
+        logger.info(f"Statistics help requested by {interaction.user.name} (ID: {interaction.user.id})")
+
         embed = discord.Embed(
             title="📊 Statistics Commands Help",
             description="Commands for viewing chore completion statistics.",
@@ -413,9 +442,12 @@ class HelpCog(commands.Cog):
         )
 
         await interaction.response.send_message(embed=embed)
+        logger.info("Statistics help displayed")
 
     async def help_difficulty(self, interaction: discord.Interaction):
         """Show help for chore difficulty commands."""
+        logger.info(f"Difficulty help requested by {interaction.user.name} (ID: {interaction.user.id})")
+
         embed = discord.Embed(
             title="⭐ Chore Difficulty Help",
             description="Commands for managing chore difficulty ratings.",
@@ -452,9 +484,12 @@ class HelpCog(commands.Cog):
         )
 
         await interaction.response.send_message(embed=embed)
+        logger.info("Difficulty help displayed")
 
     async def help_reminders(self, interaction: discord.Interaction):
         """Show help for reminder commands."""
+        logger.info(f"Reminders help requested by {interaction.user.name} (ID: {interaction.user.id})")
+
         embed = discord.Embed(
             title="⏰ Reminders Help",
             description="Commands for managing the chore reminder system.",
@@ -505,9 +540,12 @@ class HelpCog(commands.Cog):
         )
 
         await interaction.response.send_message(embed=embed)
+        logger.info("Reminders help displayed")
 
     async def help_next_week(self, interaction: discord.Interaction):
         """Show help for next week planning command."""
+        logger.info(f"Next week planning help requested by {interaction.user.name} (ID: {interaction.user.id})")
+
         embed = discord.Embed(
             title="🗓️ Next Week Planning Help",
             description="The next week planning feature allows you to manage who will be included in the next chore rotation.",
@@ -545,15 +583,17 @@ class HelpCog(commands.Cog):
         )
 
         await interaction.response.send_message(embed=embed)
+        logger.info("Next week planning help displayed")
 
 
 async def setup(bot):
+    logger.info("Setting up HelpCog")
     help_cog = HelpCog(bot)
     await bot.add_cog(help_cog)
     try:
+        logger.debug("Adding choreshelp command group to the bot")
         bot.tree.add_command(help_cog.choreshelp)
+        logger.info("HelpCog setup completed successfully")
     except Exception as e:
         # Command already registered, skip
-        import logging
-        logger = logging.getLogger('chores-bot')
         logger.warning(f"Skipping command registration: {e}")
