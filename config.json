@@ -1,0 +1,47 @@
+{
+  "token": "YOUR_DISCORD_BOT_TOKEN",
+  "prefix": "!",
+  "chores_channel_id": 123456789012345678,
+  "admin_role_id": 123456789012345678,
+  "posting_day": "Monday",
+  "posting_time": "9:00",
+  "timezone": "Europe/Bratislava",
+  "flatmates": [
+    {
+      "name": "Dominik",
+      "discord_id": 123456789012345678
+    },
+    {
+      "name": "Roman",
+      "discord_id": 123456789012345678
+    },
+    {
+      "name": "Jakub",
+      "discord_id": 123456789012345678
+    },
+    {
+      "name": "Denis",
+      "discord_id": 123456789012345678
+    },
+    {
+      "name": "Filip",
+      "discord_id": 123456789012345678
+    },
+    {
+      "name": "Maťo",
+      "discord_id": 123456789012345678
+    }
+  ],
+  "chores": [
+    "Kupelka",
+    "Zachod",
+    "Vysavanie",
+    "Zmyvanie",
+    "Kuchyňa"
+  ],
+  "emoji": {
+    "completed": "✅",
+    "unavailable": "❌"
+  },
+  "schedule_data_file": "data/schedule_data.json"
+}
