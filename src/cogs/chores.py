@@ -135,7 +135,7 @@ class ChoresCog(commands.Cog):
         reminder_status = "Enabled" if reminder_settings.get("enabled", True) else "Disabled"
         embed.add_field(
             name="Reminder Settings",
-            value=f"Status: {reminder_status}\nDay: {reminder_settings.get('day', 'Friday')}\nTime: {reminder_settings.get('time', '18:00')}",
+            value=f"Status: {reminder_status}\nDay: {reminder_settings.get('day', 'Friday')}\nTime: {reminder_settings.get('time', '11:00')}",
             inline=False
         )
 

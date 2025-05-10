@@ -326,7 +326,7 @@ class ConfigManager:
             self.config["reminders"] = {
                 "enabled": True,
                 "day": "Friday",
-                "time": "18:00"
+                "time": "11:00"
             }
             self.save_config()
 
@@ -341,7 +341,7 @@ class ConfigManager:
             self.config["reminders"] = {
                 "enabled": True,
                 "day": "Friday",
-                "time": "18:00"
+                "time": "11:00"
             }
 
         # Update values if provided
@@ -356,7 +356,7 @@ class ConfigManager:
             logger.info(f"Updated reminder day: {old_day} -> {day}")
 
         if time is not None:
-            old_time = self.config["reminders"].get("time", "18:00")
+            old_time = self.config["reminders"].get("time", "11:00")
             self.config["reminders"]["time"] = time
             logger.info(f"Updated reminder time: {old_time} -> {time}")
 

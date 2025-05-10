@@ -535,7 +535,7 @@ class HelpCog(commands.Cog):
         embed.add_field(
             name="How reminders work",
             value="The bot will automatically send reminders to flatmates who haven't completed their chores yet.\n"
-                  "By default, reminders are sent on Friday at 18:00.",
+                  "By default, reminders are sent on Friday at 11:00.",
             inline=False
         )
 

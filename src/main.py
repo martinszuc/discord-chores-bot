@@ -226,7 +226,7 @@ class ChoresBot(commands.Bot):
 
             # Get the configured day and time
             day_name = reminder_settings.get("day", "Friday")
-            time_str = reminder_settings.get("time", "18:00")
+            time_str = reminder_settings.get("time", "11:00")
             timezone = pytz.timezone(self.config["timezone"])
 
             logger.info(f"Configured reminder schedule: {day_name} at {time_str} ({timezone})")

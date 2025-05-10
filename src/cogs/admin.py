@@ -101,7 +101,7 @@ class AdminCog(commands.Cog):
                 name="⏰ Reminder Settings",
                 value=f"Status: {reminder_status}\n"
                       f"Day: {reminder_settings.get('day', 'Friday')}\n"
-                      f"Time: {reminder_settings.get('time', '18:00')}",
+                      f"Time: {reminder_settings.get('time', '11:00')}",
                 inline=False
             )
 
@@ -267,7 +267,7 @@ class AdminCog(commands.Cog):
                 name="Current Settings",
                 value=f"Status: {reminder_status}\n"
                       f"Day: {reminder_settings.get('day', 'Friday')}\n"
-                      f"Time: {reminder_settings.get('time', '18:00')}",
+                      f"Time: {reminder_settings.get('time', '11:00')}",
                 inline=False
             )
 
@@ -368,13 +368,13 @@ class AdminCog(commands.Cog):
             reminder_settings = self.config.get('reminders', {
                 'enabled': True,
                 'day': 'Friday',
-                'time': '18:00'
+                'time': '11:00'
             })
             embed.add_field(
                 name="Reminder Settings",
                 value=f"reminders.enabled: {reminder_settings.get('enabled', True)}\n"
                       f"reminders.day: {reminder_settings.get('day', 'Friday')}\n"
-                      f"reminders.time: {reminder_settings.get('time', '18:00')}",
+                      f"reminders.time: {reminder_settings.get('time', '11:00')}",
                 inline=False
             )
 
