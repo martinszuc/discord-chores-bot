@@ -1,4 +1,5 @@
 import discord
+from discord import app_commands
 from discord.ext import commands
 import datetime
 from src.utils.strings import BotStrings
@@ -9,11 +10,27 @@ class HelpCog(commands.Cog):
         self.bot = bot
         self.config = bot.config
 
-    @commands.group(name="help", invoke_without_command=True)
-    async def help_command(self, ctx):
-        """Show help information for the bot."""
-        prefix = self.config.get("prefix", "!")
+    choreshelp = app_commands.Group(name="choreshelp", description="Help commands for the chores bot")
 
+    @choreshelp.command(name="show")
+    @app_commands.describe(command="The specific command to get help with (optional)")
+    async def help_command(self, interaction: discord.Interaction, command: str = None):
+        """Show help information for the bot."""
+        if command:
+            # Call the appropriate help function based on the command parameter
+            if command == "chores":
+                await self.help_chores(interaction)
+            elif command == "choresadmin":
+                await self.help_admin(interaction)
+            elif command == "reactions":
+                await self.help_reactions(interaction)
+            elif command == "status":
+                await self.help_status(interaction)
+            else:
+                await interaction.response.send_message(f"No help available for command: {command}")
+            return
+
+        # General help
         embed = discord.Embed(
             title="🤖 Chores Bot Help",
             description=f"Welcome to the Chores Bot! Here's how to use me:",
@@ -24,31 +41,19 @@ class HelpCog(commands.Cog):
         # Basic commands
         embed.add_field(
             name="📋 Basic Commands",
-            value=f"`{prefix}chores` - Show the current chore schedule\n"
-                  f"`{prefix}chores schedule` - Show the current chore schedule\n"
-                  f"`{prefix}chores config` - Show the current configuration\n",
+            value=f"`/chores` - Show the current chore schedule\n"
+                  f"`/chores schedule` - Show the current chore schedule\n"
+                  f"`/chores config` - Show the current configuration\n",
             inline=False
         )
 
         # Admin commands
         embed.add_field(
             name="⚙️ Admin Commands",
-            value=f"`{prefix}chores next` - Post the next chore schedule\n"
-                  f"`{prefix}chores reset` - Reset the chore rotation\n"
-                  f"`{prefix}chores add_flatmate <name> <discord_id>` - Add a new flatmate\n"
-                  f"`{prefix}chores remove_flatmate <name>` - Remove a flatmate\n"
-                  f"`{prefix}chores add_chore <chore_name>` - Add a new chore\n"
-                  f"`{prefix}chores remove_chore <chore_name>` - Remove a chore\n",
-            inline=False
-        )
-
-        # Advanced admin commands
-        embed.add_field(
-            name="🛠️ Advanced Admin Commands",
-            value=f"`{prefix}admin status` - Show bot status\n"
-                  f"`{prefix}admin reload` - Reload the configuration\n"
-                  f"`{prefix}admin test [chore]` - Test notification system\n"
-                  f"`{prefix}admin settings [setting] [value]` - View or edit bot settings\n",
+            value=f"`/choresadmin status` - Show bot status\n"
+                  f"`/choresadmin reload_config` - Reload the configuration\n"
+                  f"`/choresadmin test_notification` - Test notification system\n"
+                  f"`/choresadmin settings` - View or edit bot settings\n",
             inline=False
         )
 
@@ -64,17 +69,15 @@ class HelpCog(commands.Cog):
         # Instructions for more help
         embed.add_field(
             name="📚 More Help",
-            value=f"For more detailed help on a specific command, use `{prefix}help <command>`.",
+            value=f"For more detailed help on a specific command, use `/choreshelp show command:command_name`.\n"
+                  f"Available command names: chores, choresadmin, reactions, status",
             inline=False
         )
 
-        await ctx.send(embed=embed)
+        await interaction.response.send_message(embed=embed)
 
-    @help_command.command(name="chores")
-    async def help_chores(self, ctx):
+    async def help_chores(self, interaction: discord.Interaction):
         """Show help for chores commands."""
-        prefix = self.config.get("prefix", "!")
-
         embed = discord.Embed(
             title="📋 Chores Commands Help",
             description="Commands for managing chores and the chore schedule.",
@@ -84,66 +87,63 @@ class HelpCog(commands.Cog):
 
         # Basic commands
         embed.add_field(
-            name=f"{prefix}chores",
+            name="/chores",
             value="Show the current chore schedule.",
             inline=False
         )
 
         embed.add_field(
-            name=f"{prefix}chores schedule",
+            name="/chores schedule",
             value="Show the current chore schedule.",
             inline=False
         )
 
         embed.add_field(
-            name=f"{prefix}chores next",
+            name="/chores next",
             value="Post the next chore schedule immediately. (Admin only)",
             inline=False
         )
 
         embed.add_field(
-            name=f"{prefix}chores reset",
+            name="/chores reset",
             value="Reset the chore rotation. (Admin only)",
             inline=False
         )
 
         embed.add_field(
-            name=f"{prefix}chores config",
+            name="/chores config",
             value="Show the current configuration.",
             inline=False
         )
 
         embed.add_field(
-            name=f"{prefix}chores add_flatmate <name> <discord_id>",
+            name="/chores add_flatmate name:name discord_id:id",
             value="Add a new flatmate. (Admin only)",
             inline=False
         )
 
         embed.add_field(
-            name=f"{prefix}chores remove_flatmate <name>",
+            name="/chores remove_flatmate name:name",
             value="Remove a flatmate. (Admin only)",
             inline=False
         )
 
         embed.add_field(
-            name=f"{prefix}chores add_chore <chore_name>",
+            name="/chores add_chore name:chore_name",
             value="Add a new chore. (Admin only)",
             inline=False
         )
 
         embed.add_field(
-            name=f"{prefix}chores remove_chore <chore_name>",
+            name="/chores remove_chore name:chore_name",
             value="Remove a chore. (Admin only)",
             inline=False
         )
 
-        await ctx.send(embed=embed)
+        await interaction.response.send_message(embed=embed)
 
-    @help_command.command(name="admin")
-    async def help_admin(self, ctx):
+    async def help_admin(self, interaction: discord.Interaction):
         """Show help for admin commands."""
-        prefix = self.config.get("prefix", "!")
-
         embed = discord.Embed(
             title="⚙️ Admin Commands Help",
             description="Administrative commands for managing the bot.",
@@ -153,46 +153,45 @@ class HelpCog(commands.Cog):
 
         # Admin commands
         embed.add_field(
-            name=f"{prefix}admin status",
+            name="/choresadmin status",
             value="Show the bot status.",
             inline=False
         )
 
         embed.add_field(
-            name=f"{prefix}admin reload",
+            name="/choresadmin reload_config",
             value="Reload the bot configuration.",
             inline=False
         )
 
         embed.add_field(
-            name=f"{prefix}admin test [chore]",
+            name="/choresadmin test_notification chore:chore_name",
             value="Test the notification system by sending a test message. "
                   "If a chore is specified, it will only test that chore.",
             inline=False
         )
 
         embed.add_field(
-            name=f"{prefix}admin settings",
+            name="/choresadmin settings",
             value="View all bot settings.",
             inline=False
         )
 
         embed.add_field(
-            name=f"{prefix}admin settings <setting>",
+            name="/choresadmin settings setting:setting_name",
             value="View the value of a specific setting.",
             inline=False
         )
 
         embed.add_field(
-            name=f"{prefix}admin settings <setting> <value>",
+            name="/choresadmin settings setting:setting_name value:new_value",
             value="Change the value of a specific setting.",
             inline=False
         )
 
-        await ctx.send(embed=embed)
+        await interaction.response.send_message(embed=embed)
 
-    @help_command.command(name="reactions")
-    async def help_reactions(self, ctx):
+    async def help_reactions(self, interaction: discord.Interaction):
         """Show help for reaction usage."""
         emojis = self.config.get("emoji", {"completed": "✅", "unavailable": "❌"})
 
@@ -227,8 +226,43 @@ class HelpCog(commands.Cog):
             inline=False
         )
 
-        await ctx.send(embed=embed)
+        await interaction.response.send_message(embed=embed)
+
+    async def help_status(self, interaction: discord.Interaction):
+        """Show help for the status command."""
+        embed = discord.Embed(
+            title="📊 Status Command Help",
+            description="The `/choresadmin status` command displays information about the bot's current state.",
+            color=discord.Color.blue(),
+            timestamp=datetime.datetime.now()
+        )
+
+        embed.add_field(
+            name="What it shows",
+            value="- Discord.py Version\n"
+                  "- Bot Uptime\n"
+                  "- Number of servers the bot is in\n"
+                  "- When the chore schedule was last posted\n"
+                  "- Number of chores and flatmates configured",
+            inline=False
+        )
+
+        embed.add_field(
+            name="Usage",
+            value="Simply type `/choresadmin status` to see the current bot status.",
+            inline=False
+        )
+
+        embed.add_field(
+            name="Permissions",
+            value="This command requires administrator permissions or the configured admin role.",
+            inline=False
+        )
+
+        await interaction.response.send_message(embed=embed)
 
 
 async def setup(bot):
-    await bot.add_cog(HelpCog(bot))
+    help_cog = HelpCog(bot)
+    await bot.add_cog(help_cog)
+    bot.tree.add_command(help_cog.choreshelp)

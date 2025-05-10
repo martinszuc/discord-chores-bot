@@ -1,4 +1,5 @@
 import discord
+from discord import app_commands
 from discord.ext import commands
 import logging
 import datetime
@@ -26,43 +27,40 @@ class ChoresCog(commands.Cog):
         chores_channel_id = self.config_manager.get_chores_channel_id()
         return ctx.channel.id == chores_channel_id
 
-    @commands.group(name="chores", invoke_without_command=True)
-    async def chores(self, ctx):
-        """Base command for chores management. Shows the current schedule if no subcommand is provided."""
-        if ctx.invoked_subcommand is None:
-            await self.show_schedule(ctx)
+    chores = app_commands.Group(name="chores", description="Commands for managing chores")
 
-    @chores.command(name="schedule")
-    async def show_schedule(self, ctx):
+    @chores.command(name="show")
+    async def show_schedule(self, interaction: discord.Interaction):
         """Show the current chore schedule."""
         assignments = self.schedule_manager.get_current_assignments()
         if not assignments:
-            await ctx.send(BotStrings.CMD_NO_SCHEDULE)
+            await interaction.response.send_message(BotStrings.CMD_NO_SCHEDULE)
             return
 
         # Create an embed to display the schedule
         embed = self._create_schedule_embed(assignments)
-        await ctx.send(embed=embed)
+        await interaction.response.send_message(embed=embed)
 
     @chores.command(name="next")
-    @commands.has_permissions(manage_messages=True)
-    async def next_schedule(self, ctx):
+    @app_commands.checks.has_permissions(manage_messages=True)
+    async def next_schedule(self, interaction: discord.Interaction):
         """Generate and post the next chore schedule."""
-        await self.post_schedule(ctx.channel)
-        await ctx.send(BotStrings.CMD_NEW_SCHEDULE)
+        await interaction.response.send_message("Generating new chore schedule...")
+        await self.post_schedule(interaction.channel)
+        await interaction.followup.send(BotStrings.CMD_NEW_SCHEDULE)
 
     @chores.command(name="reset")
-    @commands.has_role("Admin")  # You can customize this
-    async def reset_schedule(self, ctx):
+    @app_commands.checks.has_permissions(administrator=True)
+    async def reset_schedule(self, interaction: discord.Interaction):
         """Reset the chore rotation."""
         success, message = self.schedule_manager.reset_schedule()
-        await ctx.send(message)
+        await interaction.response.send_message(message)
         # Reset the message cache and instructions flag
         self.message_cache = {}
         self.instructions_sent = False
 
     @chores.command(name="config")
-    async def show_config(self, ctx):
+    async def show_config(self, interaction: discord.Interaction):
         """Show the current configuration."""
         flatmates = self.config_manager.get_flatmates()
         chores = self.config_manager.get_chores()
@@ -89,35 +87,43 @@ class ChoresCog(commands.Cog):
             inline=False
         )
 
-        await ctx.send(embed=embed)
+        await interaction.response.send_message(embed=embed)
 
     @chores.command(name="add_flatmate")
-    @commands.has_permissions(administrator=True)
-    async def add_flatmate(self, ctx, name: str, discord_id: int):
+    @app_commands.describe(name="Flatmate name", discord_id="Discord user ID")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def add_flatmate(self, interaction: discord.Interaction, name: str, discord_id: str):
         """Add a new flatmate."""
-        success, message = self.config_manager.add_flatmate(name, discord_id)
-        await ctx.send(message)
+        try:
+            discord_id_int = int(discord_id)
+            success, message = self.config_manager.add_flatmate(name, discord_id_int)
+            await interaction.response.send_message(message)
+        except ValueError:
+            await interaction.response.send_message("Invalid Discord ID. Please provide a valid numeric ID.")
 
     @chores.command(name="remove_flatmate")
-    @commands.has_permissions(administrator=True)
-    async def remove_flatmate(self, ctx, name: str):
+    @app_commands.describe(name="Flatmate name to remove")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def remove_flatmate(self, interaction: discord.Interaction, name: str):
         """Remove a flatmate."""
         success, message = self.config_manager.remove_flatmate(name)
-        await ctx.send(message)
+        await interaction.response.send_message(message)
 
     @chores.command(name="add_chore")
-    @commands.has_permissions(administrator=True)
-    async def add_chore(self, ctx, *, chore_name: str):
+    @app_commands.describe(name="Chore name to add")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def add_chore(self, interaction: discord.Interaction, name: str):
         """Add a new chore."""
-        success, message = self.config_manager.add_chore(chore_name)
-        await ctx.send(message)
+        success, message = self.config_manager.add_chore(name)
+        await interaction.response.send_message(message)
 
     @chores.command(name="remove_chore")
-    @commands.has_permissions(administrator=True)
-    async def remove_chore(self, ctx, *, chore_name: str):
+    @app_commands.describe(name="Chore name to remove")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def remove_chore(self, interaction: discord.Interaction, name: str):
         """Remove a chore."""
-        success, message = self.config_manager.remove_chore(chore_name)
-        await ctx.send(message)
+        success, message = self.config_manager.remove_chore(name)
+        await interaction.response.send_message(message)
 
     async def post_schedule(self, channel=None):
         """Post the weekly chore schedule with individual messages for each flatmate."""
@@ -325,4 +331,6 @@ class ChoresCog(commands.Cog):
 
 
 async def setup(bot):
-    await bot.add_cog(ChoresCog(bot))
+    chores_cog = ChoresCog(bot)
+    await bot.add_cog(chores_cog)
+    bot.tree.add_command(chores_cog.chores)

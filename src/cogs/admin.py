@@ -1,7 +1,7 @@
 import discord
+from discord import app_commands
 from discord.ext import commands
 import logging
-import os
 import json
 import datetime
 from src.utils.strings import BotStrings
@@ -26,14 +26,10 @@ class AdminCog(commands.Cog):
         # If admin_role_id is not set, fall back to administrator permission
         return ctx.author.guild_permissions.administrator
 
-    @commands.group(name="admin", invoke_without_command=True)
-    async def admin(self, ctx):
-        """Admin commands for the chores bot."""
-        if ctx.invoked_subcommand is None:
-            await ctx.send_help(ctx.command)
+    choresadmin = app_commands.Group(name="choresadmin", description="Administrative commands for the chores bot")
 
-    @admin.command(name="status")
-    async def status(self, ctx):
+    @choresadmin.command(name="status")
+    async def status(self, interaction: discord.Interaction):
         """Show the bot status."""
         # Get some stats about the bot
         embed = discord.Embed(
@@ -45,7 +41,7 @@ class AdminCog(commands.Cog):
         # Add system info
         embed.add_field(
             name="🖥️ System Info",
-            value=f"Python Version: {discord.__version__}\n"
+            value=f"Discord.py Version: {discord.__version__}\n"
                   f"Bot Uptime: {datetime.datetime.now() - self.bot.launched_at if hasattr(self.bot, 'launched_at') else 'Unknown'}\n"
                   f"Serving: {len(self.bot.guilds)} guild(s)",
             inline=False
@@ -66,44 +62,48 @@ class AdminCog(commands.Cog):
                 inline=False
             )
 
-        await ctx.send(embed=embed)
+        await interaction.response.send_message(embed=embed)
 
-    @admin.command(name="reload")
-    async def reload_config(self, ctx):
+    @choresadmin.command(name="reload_config")
+    async def reload_config(self, interaction: discord.Interaction):
         """Reload the bot configuration."""
         try:
             with open('config.json', 'r', encoding='utf-8') as f:
                 self.bot.config = json.load(f)
-            await ctx.send(BotStrings.ADMIN_CONFIG_RELOADED)
+            await interaction.response.send_message(BotStrings.ADMIN_CONFIG_RELOADED)
         except Exception as e:
             logger.error(f"Failed to reload config: {e}")
-            await ctx.send(BotStrings.ADMIN_CONFIG_FAILED.format(error=e))
+            await interaction.response.send_message(BotStrings.ADMIN_CONFIG_FAILED.format(error=e))
 
-    @admin.command(name="test")
-    async def test_notification(self, ctx, chore: str = None):
+    @choresadmin.command(name="test_notification")
+    @app_commands.describe(chore="The chore to test notifications for (optional)")
+    async def test_notification(self, interaction: discord.Interaction, chore: str = None):
         """Test the notification system by sending a test message."""
         chores_cog = self.bot.get_cog("ChoresCog")
         if not chores_cog:
-            await ctx.send("❌ Chores cog not found.")
+            await interaction.response.send_message("❌ Chores cog not found.")
             return
+
+        await interaction.response.send_message("Sending test notifications...")
+        channel = interaction.channel
 
         if chore:
             # Test notification for specific chore
             assignments = chores_cog.schedule_manager.get_current_assignments()
             if chore not in assignments:
-                await ctx.send(f"❌ Chore '{chore}' not found in current assignments.")
+                await interaction.followup.send(f"❌ Chore '{chore}' not found in current assignments.")
                 return
 
             flatmate_name = assignments.get(chore)
             flatmate = chores_cog.config_manager.get_flatmate_by_name(flatmate_name)
             if not flatmate:
-                await ctx.send(f"❌ Flatmate '{flatmate_name}' not found.")
+                await interaction.followup.send(f"❌ Flatmate '{flatmate_name}' not found.")
                 return
 
             discord_id = flatmate.get("discord_id")
 
             # Send test notification
-            await ctx.send(
+            await interaction.followup.send(
                 f"{BotStrings.ADMIN_TEST_NOTIFICATION}\n\n"
                 f"Hey <@{discord_id}>, this is a test reminder for your chore: **{chore}**\n\n"
                 f"Please remember to complete it and mark it as done with ✅"
@@ -112,14 +112,14 @@ class AdminCog(commands.Cog):
             # Test general notification for all chores
             assignments = chores_cog.schedule_manager.get_current_assignments()
             if not assignments:
-                await ctx.send(BotStrings.ERR_NO_ASSIGNMENTS)
+                await interaction.followup.send(BotStrings.ERR_NO_ASSIGNMENTS)
                 return
 
             # Send test header
-            await ctx.send(f"{BotStrings.ADMIN_TEST_NOTIFICATION}")
+            await interaction.followup.send(f"{BotStrings.ADMIN_TEST_NOTIFICATION}")
 
             # Send test instructions
-            await ctx.send(BotStrings.REACTION_INSTRUCTIONS)
+            await interaction.followup.send(BotStrings.REACTION_INSTRUCTIONS)
 
             # Send individual test messages
             emojis = chores_cog.config_manager.get_emoji()
@@ -137,18 +137,22 @@ class AdminCog(commands.Cog):
                 )
 
                 # Send message with reactions
-                message = await ctx.send(test_msg)
+                message = await channel.send(test_msg)
                 await message.add_reaction(emojis["completed"])
                 await message.add_reaction(emojis["unavailable"])
 
-    @admin.command(name="settings")
-    async def edit_settings(self, ctx, setting: str = None, *, value: str = None):
+    @choresadmin.command(name="settings")
+    @app_commands.describe(
+        setting="The setting to view or update (optional)",
+        value="The new value for the setting (optional)"
+    )
+    async def edit_settings(self, interaction: discord.Interaction, setting: str = None, value: str = None):
         """View or edit bot settings."""
         if not setting:
             # Show all settings
             embed = discord.Embed(
                 title="⚙️ Bot Settings",
-                description="Current bot settings. Use `!admin settings <setting> <value>` to change a setting.",
+                description="Current bot settings. Use `/choresadmin settings setting:name value:new_value` to change a setting.",
                 color=discord.Color.blue(),
                 timestamp=datetime.datetime.now()
             )
@@ -171,7 +175,7 @@ class AdminCog(commands.Cog):
                 inline=False
             )
 
-            await ctx.send(embed=embed)
+            await interaction.response.send_message(embed=embed)
             return
 
         # Check if setting exists
@@ -181,7 +185,7 @@ class AdminCog(commands.Cog):
         ]
 
         if setting not in valid_settings:
-            await ctx.send(BotStrings.SETTING_INVALID.format(
+            await interaction.response.send_message(BotStrings.SETTING_INVALID.format(
                 setting=setting,
                 valid_settings=", ".join(valid_settings)
             ))
@@ -190,7 +194,7 @@ class AdminCog(commands.Cog):
         if not value:
             # Show current value
             current_value = self.config.get(setting, "Not set")
-            await ctx.send(BotStrings.SETTING_CURRENT.format(
+            await interaction.response.send_message(BotStrings.SETTING_CURRENT.format(
                 setting=setting,
                 value=current_value
             ))
@@ -201,7 +205,7 @@ class AdminCog(commands.Cog):
             try:
                 value = int(value)
             except ValueError:
-                await ctx.send(BotStrings.SETTING_INVALID_VALUE.format(
+                await interaction.response.send_message(BotStrings.SETTING_INVALID_VALUE.format(
                     setting=setting,
                     reason="Must be a number."
                 ))
@@ -210,7 +214,7 @@ class AdminCog(commands.Cog):
         elif setting == "posting_day":
             valid_days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
             if value not in valid_days:
-                await ctx.send(BotStrings.SETTING_INVALID_VALUE.format(
+                await interaction.response.send_message(BotStrings.SETTING_INVALID_VALUE.format(
                     setting=setting,
                     reason=f"Must be one of: {', '.join(valid_days)}"
                 ))
@@ -220,7 +224,7 @@ class AdminCog(commands.Cog):
             # Validate time format (HH:MM)
             import re
             if not re.match(r'^([01]\d|2[0-3]):([0-5]\d)$', value):
-                await ctx.send(BotStrings.SETTING_INVALID_VALUE.format(
+                await interaction.response.send_message(BotStrings.SETTING_INVALID_VALUE.format(
                     setting=setting,
                     reason="Must be in 24-hour format (HH:MM)."
                 ))
@@ -234,7 +238,7 @@ class AdminCog(commands.Cog):
             with open('config.json', 'w', encoding='utf-8') as f:
                 json.dump(self.config, f, indent=2, ensure_ascii=False)
 
-            await ctx.send(BotStrings.SETTING_UPDATED.format(
+            await interaction.response.send_message(BotStrings.SETTING_UPDATED.format(
                 setting=setting,
                 value=value
             ))
@@ -242,12 +246,14 @@ class AdminCog(commands.Cog):
             # If it's a critical setting, suggest restarting the bot
             critical_settings = ["prefix", "chores_channel_id", "admin_role_id"]
             if setting in critical_settings:
-                await ctx.send(BotStrings.SETTING_CRITICAL_WARNING)
+                await interaction.followup.send(BotStrings.SETTING_CRITICAL_WARNING)
 
         except Exception as e:
             logger.error(f"Failed to update setting: {e}")
-            await ctx.send(BotStrings.ADMIN_CONFIG_FAILED.format(error=e))
+            await interaction.response.send_message(BotStrings.ADMIN_CONFIG_FAILED.format(error=e))
 
 
 async def setup(bot):
-    await bot.add_cog(AdminCog(bot))
+    admin_cog = AdminCog(bot)
+    await bot.add_cog(admin_cog)
+    bot.tree.add_command(admin_cog.choresadmin)

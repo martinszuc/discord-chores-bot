@@ -49,6 +49,9 @@ class ChoresBot(commands.Bot):
             help_command=None  # We'll use a custom help command
         )
 
+        # Store the bot start time
+        self.launched_at = datetime.datetime.now()
+
     async def setup_hook(self):
         # Load all cogs
         await self.load_extension("src.cogs.chores")
@@ -57,7 +60,14 @@ class ChoresBot(commands.Bot):
         logger.info("All cogs loaded")
 
         # Schedule the first chore post
-        bot.loop.create_task(self.schedule_first_chore_post())
+        self.loop.create_task(self.schedule_first_chore_post())
+
+        # Sync slash commands with Discord
+        try:
+            synced = await self.tree.sync()
+            logger.info(f"Synced {len(synced)} slash command(s)")
+        except Exception as e:
+            logger.error(f"Failed to sync slash commands: {e}")
 
     async def on_ready(self):
         logger.info(f'{self.user} has connected to Discord!')
@@ -67,7 +77,7 @@ class ChoresBot(commands.Bot):
         await self.change_presence(
             activity=discord.Activity(
                 type=discord.ActivityType.listening,
-                name=f"{self.config['prefix']}chores help"
+                name=f"/choreshelp show"
             )
         )
 
