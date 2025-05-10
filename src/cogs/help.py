@@ -34,6 +34,8 @@ class HelpCog(commands.Cog):
                 await self.help_difficulty(interaction)
             elif command == "reminders":
                 await self.help_reminders(interaction)
+            elif command == "next_week":
+                await self.help_next_week(interaction)
             else:
                 await interaction.response.send_message(f"No help available for command: {command}")
             return
@@ -51,7 +53,8 @@ class HelpCog(commands.Cog):
             name="📋 Basic Commands",
             value=f"`/chores show` - Show the current chore schedule\n"
                   f"`/chores config` - Show the current configuration\n"
-                  f"`/chores vacation status:True/False` - Enable or disable vacation mode\n"
+                  f"`/chores vacation status:True/False [user:@user]` - Enable/disable vacation mode for yourself or someone else\n"
+                  f"`/chores next_week` - Plan who will be included in next week's chore rotation\n"
                   f"`/chores stats [name]` - Show your statistics or another flatmate's",
             inline=False
         )
@@ -81,7 +84,7 @@ class HelpCog(commands.Cog):
         embed.add_field(
             name="📚 More Help",
             value=f"For more detailed help on a specific command, use `/choreshelp show command:command_name`.\n"
-                  f"Available command names: chores, choresadmin, reactions, status, vacation, statistics, difficulty, reminders",
+                  f"Available command names: chores, choresadmin, reactions, status, vacation, statistics, difficulty, reminders, next_week",
             inline=False
         )
 
@@ -146,8 +149,8 @@ class HelpCog(commands.Cog):
         )
 
         embed.add_field(
-            name="/chores vacation status:True/False",
-            value="Enable or disable vacation mode for yourself.",
+            name="/chores vacation status:True/False [user:@user]",
+            value="Enable or disable vacation mode for yourself or another flatmate.",
             inline=False
         )
 
@@ -166,6 +169,12 @@ class HelpCog(commands.Cog):
         embed.add_field(
             name="/chores vote_difficulty chore:chore_name",
             value="Start a vote on the difficulty of a chore.",
+            inline=False
+        )
+
+        embed.add_field(
+            name="/chores next_week",
+            value="Show and plan who will be included in next week's chore rotation. React with numbers to toggle inclusion/exclusion.",
             inline=False
         )
 
@@ -327,14 +336,14 @@ class HelpCog(commands.Cog):
         )
 
         embed.add_field(
-            name="Enabling vacation mode",
+            name="Enabling vacation mode for yourself",
             value="`/chores vacation status:True`\n\n"
                   "When you enable vacation mode, you will not be assigned any chores in the next schedule generation.",
             inline=False
         )
 
         embed.add_field(
-            name="Disabling vacation mode",
+            name="Disabling vacation mode for yourself",
             value="`/chores vacation status:False`\n\n"
                   "When you disable vacation mode, you will be included in the next schedule generation.\n"
                   "Additionally, you will be given higher priority to be assigned chores when you return.",
@@ -342,8 +351,23 @@ class HelpCog(commands.Cog):
         )
 
         embed.add_field(
+            name="Setting vacation mode for others",
+            value="`/chores vacation status:True user:@username`\n\n"
+                  "You can set vacation mode for other flatmates by mentioning them with the user parameter.\n"
+                  "This is useful when someone forgets to set their own status before going away.",
+            inline=False
+        )
+
+        embed.add_field(
             name="Checking vacation status",
             value="Use `/chores config` to see which flatmates are currently on vacation.",
+            inline=False
+        )
+
+        embed.add_field(
+            name="Temporary exclusion from rotation",
+            value="If you want to exclude someone from just the next rotation (not full vacation mode),\n"
+                  "use `/chores next_week` and react to toggle their inclusion status.",
             inline=False
         )
 
@@ -477,6 +501,46 @@ class HelpCog(commands.Cog):
             name="How reminders work",
             value="The bot will automatically send reminders to flatmates who haven't completed their chores yet.\n"
                   "By default, reminders are sent on Friday at 18:00.",
+            inline=False
+        )
+
+        await interaction.response.send_message(embed=embed)
+
+    async def help_next_week(self, interaction: discord.Interaction):
+        """Show help for next week planning command."""
+        embed = discord.Embed(
+            title="🗓️ Next Week Planning Help",
+            description="The next week planning feature allows you to manage who will be included in the next chore rotation.",
+            color=discord.Color.blue(),
+            timestamp=datetime.datetime.now()
+        )
+
+        embed.add_field(
+            name="Viewing next week's rotation plan",
+            value="`/chores next_week`\n\n"
+                  "Shows all active flatmates (those not on vacation) and whether they're included or excluded from the next rotation.",
+            inline=False
+        )
+
+        embed.add_field(
+            name="Excluding a flatmate from next rotation",
+            value="React with the number emoji next to a flatmate's name to toggle their exclusion status.\n"
+                  "This is a temporary exclusion just for the next schedule generation, not the same as vacation mode.",
+            inline=False
+        )
+
+        embed.add_field(
+            name="Including a previously excluded flatmate",
+            value="React with the number emoji next to a flatmate who is currently marked as excluded to include them again.",
+            inline=False
+        )
+
+        embed.add_field(
+            name="Important notes",
+            value="- Exclusions from next week's rotation are cleared after the schedule is generated\n"
+                  "- This feature is best used right before a new schedule is generated\n"
+                  "- All flatmates can use this feature, not just admins\n"
+                  "- You can see who's currently excluded in the `/chores config` command",
             inline=False
         )
 

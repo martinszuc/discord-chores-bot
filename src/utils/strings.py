@@ -31,6 +31,8 @@ class BotStrings:
     ERR_REASSIGN_FAILED = "Failed to reassign chore: {chore}"
     ERR_CHANNEL_NOT_FOUND = "Chores channel not found: {channel_id}"
     ERR_NO_ELIGIBLE_FLATMATES = "No eligible flatmates for reassignment."
+    ERR_NEXT_WEEK_NO_ACTIVE = "No active flatmates found for next week's rotation."
+    ERR_NEXT_WEEK_INVALID_SELECTION = "Invalid selection. Please try again."
 
     # Embed titles and fields
     EMBED_SCHEDULE_TITLE = "📋 Weekly Chore Schedule"
@@ -70,6 +72,8 @@ class BotStrings:
     # Vacation mode
     VACATION_ENABLED = "✅ {name} is now on vacation and will be excluded from chore assignments."
     VACATION_DISABLED = "✅ {name} is no longer on vacation and will be included in chore assignments."
+    VACATION_ENABLED_OTHER = "✅ {setter} has set {name} to vacation mode. They will be excluded from chore assignments."
+    VACATION_DISABLED_OTHER = "✅ {setter} has removed {name} from vacation mode. They will be included in chore assignments."
 
     # Statistics
     STATS_HEADER = "📊 **Statistics for {name}** 📊"
@@ -91,3 +95,8 @@ class BotStrings:
     DIFFICULTY_VOTE_INSTRUCTIONS = "React with the number that represents how difficult you think **{chore}** is:"
     DIFFICULTY_VOTE_SCALE = "1️⃣ = Very Easy, 5️⃣ = Very Hard"
     DIFFICULTY_VOTE_RESULT = "The difficulty of **{chore}** has been set to {level}/5 based on votes."
+
+    # Next week planning
+    NEXT_WEEK_INCLUDED = "✅ {name} has been included in the next chore rotation."
+    NEXT_WEEK_EXCLUDED = "❌ {name} has been excluded from the next chore rotation."
+    NEXT_WEEK_TOGGLE = "{user} has toggled {name}'s inclusion in the next chore rotation."

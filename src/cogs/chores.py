@@ -23,6 +23,10 @@ class ChoresCog(commands.Cog):
         # Cache for difficulty voting messages (maps message_id -> chore_name)
         self.difficulty_vote_cache = {}
 
+        # Cache for next week planning (will be initialized when command is used)
+        # Format: {"message_id": id, "flatmates": [(name, index)]}
+        self.next_week_planning_cache = None
+
         # Track if instructions have been sent
         self.instructions_sent = False
 
@@ -108,6 +112,16 @@ class ChoresCog(commands.Cog):
             inline=False
         )
 
+        # Add next week exclusions
+        excluded_flatmates = self.schedule_manager.get_excluded_for_next_rotation()
+        if excluded_flatmates:
+            exclusions_str = "\n".join([f"• {name}" for name in excluded_flatmates])
+            embed.add_field(
+                name="Excluded from Next Rotation",
+                value=exclusions_str,
+                inline=False
+            )
+
         await interaction.response.send_message(embed=embed)
 
     @chores.command(name="add_flatmate")
@@ -152,13 +166,19 @@ class ChoresCog(commands.Cog):
         await interaction.response.send_message(message)
 
     @chores.command(name="vacation")
-    @app_commands.describe(status="Enable or disable vacation mode")
-    async def toggle_vacation(self, interaction: discord.Interaction, status: bool = True):
-        """Enable or disable vacation mode for yourself."""
+    @app_commands.describe(
+        status="Enable or disable vacation mode",
+        user="The user to set vacation mode for (optional, defaults to yourself)"
+    )
+    async def toggle_vacation(self, interaction: discord.Interaction, status: bool = True, user: discord.User = None):
+        """Enable or disable vacation mode for yourself or another flatmate."""
+        # If no user specified, use the command invoker
+        target_user = user or interaction.user
+
         # Get the flatmate based on Discord ID
-        flatmate = self.config_manager.get_flatmate_by_discord_id(interaction.user.id)
+        flatmate = self.config_manager.get_flatmate_by_discord_id(target_user.id)
         if not flatmate:
-            await interaction.response.send_message("You are not registered as a flatmate.")
+            await interaction.response.send_message(f"{target_user.display_name} is not registered as a flatmate.")
             return
 
         # Update vacation status
@@ -168,9 +188,22 @@ class ChoresCog(commands.Cog):
         if success and not status:
             flatmate["recently_returned"] = True
             self.config_manager.save_config()
-            await interaction.response.send_message(BotStrings.VACATION_DISABLED.format(name=flatmate["name"]))
+
+            if target_user.id == interaction.user.id:
+                await interaction.response.send_message(BotStrings.VACATION_DISABLED.format(name=flatmate["name"]))
+            else:
+                await interaction.response.send_message(BotStrings.VACATION_DISABLED_OTHER.format(
+                    name=flatmate["name"],
+                    setter=interaction.user.display_name
+                ))
         elif success:
-            await interaction.response.send_message(BotStrings.VACATION_ENABLED.format(name=flatmate["name"]))
+            if target_user.id == interaction.user.id:
+                await interaction.response.send_message(BotStrings.VACATION_ENABLED.format(name=flatmate["name"]))
+            else:
+                await interaction.response.send_message(BotStrings.VACATION_ENABLED_OTHER.format(
+                    name=flatmate["name"],
+                    setter=interaction.user.display_name
+                ))
         else:
             await interaction.response.send_message(message)
 
@@ -316,6 +349,72 @@ class ChoresCog(commands.Cog):
         except Exception as e:
             logger.error(f"Error processing difficulty vote: {e}")
             await interaction.channel.send(f"There was an error processing the vote for **{chore}**.")
+
+    @chores.command(name="next_week")
+    async def next_week_planning(self, interaction: discord.Interaction):
+        """Show and plan who will be included in next week's chore rotation."""
+        # Get all flatmates who are not on vacation
+        active_flatmates = self.config_manager.get_active_flatmates()
+        if not active_flatmates:
+            await interaction.response.send_message(BotStrings.ERR_NEXT_WEEK_NO_ACTIVE)
+            return
+
+        # Get excluded flatmates for next rotation
+        excluded_flatmates = self.schedule_manager.get_excluded_for_next_rotation()
+
+        # Create embed for display
+        embed = discord.Embed(
+            title="🗓️ Next Week's Chore Rotation Planning",
+            description="Below are the flatmates who will be included in next week's chore rotation.\n"
+                        "React with the number beside a flatmate to toggle their inclusion/exclusion.",
+            color=discord.Color.blue(),
+            timestamp=datetime.datetime.now()
+        )
+
+        # Number emojis for selection
+        number_emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+
+        # Add fields for each flatmate
+        for i, flatmate in enumerate(active_flatmates):
+            if i >= len(number_emojis):
+                break
+
+            # Check if flatmate is already excluded for next rotation
+            is_excluded = flatmate["name"] in excluded_flatmates
+
+            # For each flatmate, show their status
+            status = "❌ Excluded from next rotation" if is_excluded else "✅ Included in next rotation"
+
+            embed.add_field(
+                name=f"{number_emojis[i]} {flatmate['name']}",
+                value=f"<@{flatmate['discord_id']}>\n{status}",
+                inline=True
+            )
+
+        # Add instructions
+        embed.add_field(
+            name="Instructions",
+            value="React with the number next to a flatmate to toggle their inclusion/exclusion.\n"
+                  "Changes will apply to the next schedule generation.",
+            inline=False
+        )
+
+        # Send the message
+        await interaction.response.send_message(embed=embed)
+
+        # Get the sent message for adding reactions
+        message = await interaction.original_response()
+
+        # Add reactions for each flatmate
+        for i, flatmate in enumerate(active_flatmates):
+            if i < len(number_emojis):
+                await message.add_reaction(number_emojis[i])
+
+        # Store message ID and flatmates in cache for reaction handling
+        self.next_week_planning_cache = {
+            "message_id": message.id,
+            "flatmates": [(f["name"], i) for i, f in enumerate(active_flatmates) if i < len(number_emojis)]
+        }
 
     async def post_schedule(self, channel=None):
         """Post the weekly chore schedule with individual messages for each flatmate."""
@@ -473,6 +572,10 @@ class ChoresCog(commands.Cog):
         elif payload.message_id in self.difficulty_vote_cache:
             # We don't need to do anything here, as voting is handled in the vote_difficulty command
             pass
+        elif hasattr(self, 'next_week_planning_cache') and payload.message_id == self.next_week_planning_cache.get(
+                "message_id"):
+            # Handle reactions to next week planning
+            await self._handle_next_week_planning_reaction(payload)
 
     async def _handle_chore_reaction(self, payload):
         """Handle reactions to chore assignment messages."""
@@ -578,6 +681,125 @@ class ChoresCog(commands.Cog):
         else:
             # Remove unrelated reactions
             await message.remove_reaction(payload.emoji, user)
+
+    async def _handle_next_week_planning_reaction(self, payload):
+        """Handle reactions to next week planning messages."""
+        # Skip if not a tracked message
+        if not hasattr(self, 'next_week_planning_cache') or self.next_week_planning_cache.get(
+                "message_id") != payload.message_id:
+            return
+
+        # Get the channel
+        channel = self.bot.get_channel(payload.channel_id)
+        if not channel:
+            return
+
+        # Get the message
+        try:
+            message = await channel.fetch_message(payload.message_id)
+            if not message:
+                return
+        except Exception as e:
+            logger.error(f"Failed to fetch message: {e}")
+            return
+
+        # Get the user who reacted
+        user = self.bot.get_user(payload.user_id)
+        if not user or user.bot:  # Skip if bot reaction
+            return
+
+        # Get emoji
+        emoji_name = str(payload.emoji)
+
+        # Number emojis for flatmate selection
+        number_emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+
+        # Check if the emoji is a number emoji
+        if emoji_name in number_emojis:
+            # Find the corresponding flatmate
+            selected_index = number_emojis.index(emoji_name)
+            selected_flatmate = None
+
+            for name, idx in self.next_week_planning_cache["flatmates"]:
+                if idx == selected_index:
+                    selected_flatmate = name
+                    break
+
+            if not selected_flatmate:
+                await message.remove_reaction(payload.emoji, user)
+                return
+
+            # Toggle the flatmate's exclusion status
+            excluded_flatmates = self.schedule_manager.get_excluded_for_next_rotation()
+
+            if selected_flatmate in excluded_flatmates:
+                # Include the flatmate
+                self.schedule_manager.include_in_next_rotation(selected_flatmate)
+                await channel.send(
+                    f"{user.mention} has included {selected_flatmate} in the next chore rotation.",
+                    delete_after=5
+                )
+            else:
+                # Exclude the flatmate
+                self.schedule_manager.exclude_from_next_rotation(selected_flatmate)
+                await channel.send(
+                    f"{user.mention} has excluded {selected_flatmate} from the next chore rotation.",
+                    delete_after=5
+                )
+
+            # Update the embed to reflect changes
+            await self._update_next_week_planning_embed(message)
+
+        # Remove the reaction
+        await message.remove_reaction(payload.emoji, user)
+
+    async def _update_next_week_planning_embed(self, message):
+        """Update the next week planning embed to reflect current exclusions."""
+        # Get all flatmates who are not on vacation
+        active_flatmates = self.config_manager.get_active_flatmates()
+
+        # Get excluded flatmates for next rotation
+        excluded_flatmates = self.schedule_manager.get_excluded_for_next_rotation()
+
+        # Create updated embed
+        embed = discord.Embed(
+            title="🗓️ Next Week's Chore Rotation Planning",
+            description="Below are the flatmates who will be included in next week's chore rotation.\n"
+                        "React with the corresponding number to toggle inclusion/exclusion.",
+            color=discord.Color.blue(),
+            timestamp=datetime.datetime.now()
+        )
+
+        # Number emojis for selection
+        number_emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+
+        # Add fields for each flatmate with updated status
+        for i, flatmate in enumerate(active_flatmates):
+            if i >= len(number_emojis):
+                break
+
+            # Check if flatmate is excluded for next rotation
+            is_excluded = flatmate["name"] in excluded_flatmates
+
+            # Determine status
+            status = "❌ Excluded from next rotation" if is_excluded else "✅ Included in next rotation"
+
+            embed.add_field(
+                name=f"{number_emojis[i]} {flatmate['name']}",
+                value=f"<@{flatmate['discord_id']}>\n{status}",
+                inline=True
+            )
+
+        # Add instructions
+        embed.add_field(
+            name="Instructions",
+            value="React with the number next to a flatmate to toggle their inclusion/exclusion.\n"
+                  "Changes will apply to the next schedule generation.",
+            inline=False
+        )
+
+        # Edit the message with the updated embed
+        await message.edit(embed=embed)
 
 
 async def setup(bot):

@@ -27,7 +27,8 @@ class ScheduleManager:
                     "current_assignments": {},
                     "rotation_indices": {},
                     "voted_flatmates": [],  # Track flatmates who have already voted
-                    "pending_chores": []  # Track chores that haven't been completed
+                    "pending_chores": [],  # Track chores that haven't been completed
+                    "excluded_for_next_rotation": []  # Track flatmates to exclude from the next rotation
                 }
                 self._save_schedule_data(default_data)
                 return default_data
@@ -39,7 +40,8 @@ class ScheduleManager:
                 "current_assignments": {},
                 "rotation_indices": {},
                 "voted_flatmates": [],
-                "pending_chores": []
+                "pending_chores": [],
+                "excluded_for_next_rotation": []
             }
 
     def _save_schedule_data(self, data=None):
@@ -98,6 +100,40 @@ class ScheduleManager:
         """Get list of flatmates who have already voted."""
         return self.schedule_data.get("voted_flatmates", [])
 
+    def get_excluded_for_next_rotation(self):
+        """Get the list of flatmates excluded from the next rotation."""
+        if "excluded_for_next_rotation" not in self.schedule_data:
+            self.schedule_data["excluded_for_next_rotation"] = []
+        return self.schedule_data["excluded_for_next_rotation"]
+
+    def exclude_from_next_rotation(self, flatmate_name):
+        """Exclude a flatmate from the next rotation."""
+        if "excluded_for_next_rotation" not in self.schedule_data:
+            self.schedule_data["excluded_for_next_rotation"] = []
+
+        if flatmate_name not in self.schedule_data["excluded_for_next_rotation"]:
+            self.schedule_data["excluded_for_next_rotation"].append(flatmate_name)
+            self._save_schedule_data()
+            return True
+        return False
+
+    def include_in_next_rotation(self, flatmate_name):
+        """Include a previously excluded flatmate in the next rotation."""
+        if "excluded_for_next_rotation" not in self.schedule_data:
+            return False
+
+        if flatmate_name in self.schedule_data["excluded_for_next_rotation"]:
+            self.schedule_data["excluded_for_next_rotation"].remove(flatmate_name)
+            self._save_schedule_data()
+            return True
+        return False
+
+    def clear_next_rotation_exclusions(self):
+        """Clear all exclusions for the next rotation."""
+        self.schedule_data["excluded_for_next_rotation"] = []
+        self._save_schedule_data()
+        return True
+
     def calculate_priority_score(self, flatmate):
         """Calculate a priority score for a flatmate based on their stats.
         Lower score means higher priority to be assigned a chore.
@@ -118,14 +154,21 @@ class ScheduleManager:
 
     def generate_new_schedule(self):
         """Generate a new chore schedule using the priority system and difficulty balancing."""
-        flatmates = self.config_manager.get_active_flatmates()
+        # Get active flatmates (not on vacation)
+        all_active_flatmates = self.config_manager.get_active_flatmates()
+
+        # Filter out flatmates excluded for the next rotation
+        excluded_flatmates = self.get_excluded_for_next_rotation()
+        flatmates = [f for f in all_active_flatmates if f["name"] not in excluded_flatmates]
+
+        # Get list of chores
         chores = self.config_manager.get_chores()
 
         if not flatmates or not chores:
             logger.warning("Cannot generate schedule: No flatmates or no chores defined")
             return {}
 
-        # Reset 'recently_returned' flag for all flatmates in next iteration
+        # Reset 'recently_returned' flag for all flatmates
         for flatmate in self.config_manager.get_flatmates():
             if flatmate.get("recently_returned", False):
                 flatmate["recently_returned"] = False
@@ -177,6 +220,9 @@ class ScheduleManager:
         self.schedule_data["voted_flatmates"] = []
         # Initialize pending chores with all chores
         self.schedule_data["pending_chores"] = list(new_assignments.keys())
+        # Clear exclusions after generating the schedule
+        self.clear_next_rotation_exclusions()
+
         self._save_schedule_data()
 
         return new_assignments
@@ -275,7 +321,8 @@ class ScheduleManager:
             "current_assignments": {},
             "rotation_indices": {},
             "voted_flatmates": [],
-            "pending_chores": []
+            "pending_chores": [],
+            "excluded_for_next_rotation": []
         }
         self._save_schedule_data()
         return True, "Schedule has been reset"
