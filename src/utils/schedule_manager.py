@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import datetime
+import random
 from pathlib import Path
 
 logger = logging.getLogger('chores-bot')
@@ -24,7 +25,8 @@ class ScheduleManager:
                 default_data = {
                     "last_posted": None,
                     "current_assignments": {},
-                    "rotation_indices": {}
+                    "rotation_indices": {},
+                    "voted_flatmates": []  # Track flatmates who have already voted
                 }
                 self._save_schedule_data(default_data)
                 return default_data
@@ -34,7 +36,8 @@ class ScheduleManager:
             return {
                 "last_posted": None,
                 "current_assignments": {},
-                "rotation_indices": {}
+                "rotation_indices": {},
+                "voted_flatmates": []
             }
 
     def _save_schedule_data(self, data=None):
@@ -58,6 +61,8 @@ class ScheduleManager:
     def update_last_posted_date(self):
         """Update the last posted date to now."""
         self.schedule_data["last_posted"] = datetime.datetime.now().isoformat()
+        # Reset voted flatmates when posting a new schedule
+        self.schedule_data["voted_flatmates"] = []
         self._save_schedule_data()
 
     def get_current_assignments(self):
@@ -71,6 +76,19 @@ class ScheduleManager:
     def get_rotation_index(self, chore):
         """Get the current rotation index for a chore."""
         return self.schedule_data.get("rotation_indices", {}).get(chore, 0)
+
+    def add_voted_flatmate(self, flatmate_name):
+        """Mark a flatmate as having voted (used a reaction)."""
+        if "voted_flatmates" not in self.schedule_data:
+            self.schedule_data["voted_flatmates"] = []
+
+        if flatmate_name not in self.schedule_data["voted_flatmates"]:
+            self.schedule_data["voted_flatmates"].append(flatmate_name)
+            self._save_schedule_data()
+
+    def get_voted_flatmates(self):
+        """Get list of flatmates who have already voted."""
+        return self.schedule_data.get("voted_flatmates", [])
 
     def generate_new_schedule(self):
         """Generate a new chore schedule."""
@@ -98,9 +116,65 @@ class ScheduleManager:
 
         # Save new assignments
         self.schedule_data["current_assignments"] = new_assignments
+        # Reset voted flatmates list for the new schedule
+        self.schedule_data["voted_flatmates"] = []
         self._save_schedule_data()
 
         return new_assignments
+
+    def randomly_reassign_chore(self, chore, excluding_flatmate):
+        """
+        Randomly reassign a chore to a flatmate who hasn't voted this week,
+        excluding the original flatmate.
+
+        Args:
+            chore (str): The chore to reassign
+            excluding_flatmate (str): Name of the flatmate to exclude from reassignment
+
+        Returns:
+            str or None: Name of the flatmate the chore was reassigned to, or None if reassignment failed
+        """
+        flatmates = self.config_manager.get_flatmates()
+        if not flatmates:
+            logger.warning("Cannot reassign: No flatmates defined")
+            return None
+
+        # Get current assignment
+        current_assignment = self.get_assignment_for_chore(chore)
+        if not current_assignment:
+            logger.warning(f"No current assignment for chore: {chore}")
+            return None
+
+        # Get flatmates who haven't voted this week
+        voted_flatmates = self.get_voted_flatmates()
+
+        # Eligible flatmates: not the current assignee and hasn't voted yet
+        eligible_flatmates = [
+            f for f in flatmates
+            if f["name"] != excluding_flatmate and f["name"] not in voted_flatmates
+        ]
+
+        # If no eligible flatmates who haven't voted, fall back to anyone except the current assignee
+        if not eligible_flatmates:
+            logger.warning("No eligible flatmates who haven't voted yet, falling back to any available flatmate")
+            eligible_flatmates = [f for f in flatmates if f["name"] != excluding_flatmate]
+
+        if not eligible_flatmates:
+            logger.warning("No eligible flatmates for reassignment")
+            return None
+
+        # Randomly select a flatmate
+        next_flatmate = random.choice(eligible_flatmates)
+
+        # Update assignment
+        self.schedule_data["current_assignments"][chore] = next_flatmate["name"]
+
+        # Mark the new flatmate as having "voted" (been assigned a task)
+        self.add_voted_flatmate(next_flatmate["name"])
+
+        self._save_schedule_data()
+
+        return next_flatmate["name"]
 
     def rotate_assignment(self, chore):
         """Rotate the assignment for a specific chore to the next flatmate."""
@@ -146,6 +220,9 @@ class ScheduleManager:
         if current_assignment != flatmate_name:
             return False, f"Chore is assigned to {current_assignment}, not {flatmate_name}"
 
+        # Mark flatmate as having voted
+        self.add_voted_flatmate(flatmate_name)
+
         # Record completion (could be expanded to track completion history)
         # For now, we'll just return success
         return True, f"Chore '{chore}' marked as completed by {flatmate_name}"
@@ -155,7 +232,8 @@ class ScheduleManager:
         self.schedule_data = {
             "last_posted": None,
             "current_assignments": {},
-            "rotation_indices": {}
+            "rotation_indices": {},
+            "voted_flatmates": []
         }
         self._save_schedule_data()
         return True, "Schedule has been reset"

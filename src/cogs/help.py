@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 import datetime
+from src.utils.strings import BotStrings
 
 
 class HelpCog(commands.Cog):
@@ -56,7 +57,7 @@ class HelpCog(commands.Cog):
         embed.add_field(
             name="👍 Reaction Usage",
             value=f"{emojis['completed']} - Mark a chore as completed\n"
-                  f"{emojis['unavailable']} - Indicate you cannot complete a chore (will be reassigned)\n",
+                  f"{emojis['unavailable']} - Indicate you cannot complete a chore (will be randomly reassigned)\n",
             inline=False
         )
 
@@ -212,17 +213,17 @@ class HelpCog(commands.Cog):
         embed.add_field(
             name=f"{emojis['unavailable']} Cannot Complete",
             value="React with this emoji to indicate you cannot complete your assigned chore. "
-                  "The chore will be automatically reassigned to the next flatmate in the rotation.",
+                  "The chore will be automatically reassigned to a random flatmate who hasn't voted this week.",
             inline=False
         )
 
         # Add some examples
         embed.add_field(
             name="📝 Examples",
-            value="1. When you see your name assigned to a chore in the schedule, you need to complete it.\n"
+            value="1. The bot will send you a personal message with your assigned chore.\n"
                   "2. After completing the chore, react with ✅ to mark it as done.\n"
                   "3. If you're unable to complete the chore (e.g., you're away), react with ❌.\n"
-                  "4. When you react with ❌, the bot will automatically assign the chore to someone else.",
+                  "4. When you react with ❌, the bot will automatically assign the chore to someone else who hasn't already completed or declined a task this week.",
             inline=False
         )
 

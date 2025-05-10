@@ -4,6 +4,7 @@ import logging
 import os
 import json
 import datetime
+from src.utils.strings import BotStrings
 
 logger = logging.getLogger('chores-bot')
 
@@ -73,10 +74,10 @@ class AdminCog(commands.Cog):
         try:
             with open('config.json', 'r', encoding='utf-8') as f:
                 self.bot.config = json.load(f)
-            await ctx.send("✅ Configuration reloaded successfully.")
+            await ctx.send(BotStrings.ADMIN_CONFIG_RELOADED)
         except Exception as e:
             logger.error(f"Failed to reload config: {e}")
-            await ctx.send(f"❌ Failed to reload configuration: {e}")
+            await ctx.send(BotStrings.ADMIN_CONFIG_FAILED.format(error=e))
 
     @admin.command(name="test")
     async def test_notification(self, ctx, chore: str = None):
@@ -103,7 +104,7 @@ class AdminCog(commands.Cog):
 
             # Send test notification
             await ctx.send(
-                f"🔔 **TEST NOTIFICATION** 🔔\n\n"
+                f"{BotStrings.ADMIN_TEST_NOTIFICATION}\n\n"
                 f"Hey <@{discord_id}>, this is a test reminder for your chore: **{chore}**\n\n"
                 f"Please remember to complete it and mark it as done with ✅"
             )
@@ -111,27 +112,34 @@ class AdminCog(commands.Cog):
             # Test general notification for all chores
             assignments = chores_cog.schedule_manager.get_current_assignments()
             if not assignments:
-                await ctx.send("❌ No chore assignments found.")
+                await ctx.send(BotStrings.ERR_NO_ASSIGNMENTS)
                 return
 
-            embed = discord.Embed(
-                title="🔔 TEST REMINDER: Weekly Chore Schedule",
-                description="This is a test notification. Here's your current chore assignments:",
-                color=discord.Color.orange(),
-                timestamp=datetime.datetime.now()
-            )
+            # Send test header
+            await ctx.send(f"{BotStrings.ADMIN_TEST_NOTIFICATION}")
 
+            # Send test instructions
+            await ctx.send(BotStrings.REACTION_INSTRUCTIONS)
+
+            # Send individual test messages
+            emojis = chores_cog.config_manager.get_emoji()
             for chore, flatmate_name in assignments.items():
                 flatmate = chores_cog.config_manager.get_flatmate_by_name(flatmate_name)
-                if flatmate:
-                    discord_id = flatmate.get("discord_id")
-                    value = f"🧹 Assigned to: <@{discord_id}>"
-                else:
-                    value = f"🧹 Assigned to: {flatmate_name}"
+                if not flatmate:
+                    continue
 
-                embed.add_field(name=f"**{chore}**", value=value, inline=False)
+                discord_id = flatmate.get("discord_id")
 
-            await ctx.send("🔔 **TEST NOTIFICATION** 🔔", embed=embed)
+                # Create the test assignment message
+                test_msg = BotStrings.TASK_ASSIGNMENT.format(
+                    mention=f"<@{discord_id}>",
+                    chore=chore
+                )
+
+                # Send message with reactions
+                message = await ctx.send(test_msg)
+                await message.add_reaction(emojis["completed"])
+                await message.add_reaction(emojis["unavailable"])
 
     @admin.command(name="settings")
     async def edit_settings(self, ctx, setting: str = None, *, value: str = None):
@@ -173,13 +181,19 @@ class AdminCog(commands.Cog):
         ]
 
         if setting not in valid_settings:
-            await ctx.send(f"❌ Invalid setting: {setting}. Valid settings are: {', '.join(valid_settings)}")
+            await ctx.send(BotStrings.SETTING_INVALID.format(
+                setting=setting,
+                valid_settings=", ".join(valid_settings)
+            ))
             return
 
         if not value:
             # Show current value
             current_value = self.config.get(setting, "Not set")
-            await ctx.send(f"Current value of `{setting}`: `{current_value}`")
+            await ctx.send(BotStrings.SETTING_CURRENT.format(
+                setting=setting,
+                value=current_value
+            ))
             return
 
         # Validate and convert values
@@ -187,20 +201,29 @@ class AdminCog(commands.Cog):
             try:
                 value = int(value)
             except ValueError:
-                await ctx.send(f"❌ Invalid value for {setting}. Must be a number.")
+                await ctx.send(BotStrings.SETTING_INVALID_VALUE.format(
+                    setting=setting,
+                    reason="Must be a number."
+                ))
                 return
 
         elif setting == "posting_day":
             valid_days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
             if value not in valid_days:
-                await ctx.send(f"❌ Invalid day. Must be one of: {', '.join(valid_days)}")
+                await ctx.send(BotStrings.SETTING_INVALID_VALUE.format(
+                    setting=setting,
+                    reason=f"Must be one of: {', '.join(valid_days)}"
+                ))
                 return
 
         elif setting == "posting_time":
             # Validate time format (HH:MM)
             import re
             if not re.match(r'^([01]\d|2[0-3]):([0-5]\d)$', value):
-                await ctx.send("❌ Invalid time format. Must be in 24-hour format (HH:MM).")
+                await ctx.send(BotStrings.SETTING_INVALID_VALUE.format(
+                    setting=setting,
+                    reason="Must be in 24-hour format (HH:MM)."
+                ))
                 return
 
         # Update the setting
@@ -211,17 +234,19 @@ class AdminCog(commands.Cog):
             with open('config.json', 'w', encoding='utf-8') as f:
                 json.dump(self.config, f, indent=2, ensure_ascii=False)
 
-            await ctx.send(f"✅ Setting `{setting}` updated to `{value}`.")
+            await ctx.send(BotStrings.SETTING_UPDATED.format(
+                setting=setting,
+                value=value
+            ))
 
             # If it's a critical setting, suggest restarting the bot
             critical_settings = ["prefix", "chores_channel_id", "admin_role_id"]
             if setting in critical_settings:
-                await ctx.send(
-                    "⚠️ This is a critical setting. Consider restarting the bot for the changes to take full effect.")
+                await ctx.send(BotStrings.SETTING_CRITICAL_WARNING)
 
         except Exception as e:
             logger.error(f"Failed to update setting: {e}")
-            await ctx.send(f"❌ Failed to update setting: {e}")
+            await ctx.send(BotStrings.ADMIN_CONFIG_FAILED.format(error=e))
 
 
 async def setup(bot):

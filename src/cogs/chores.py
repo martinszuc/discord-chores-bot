@@ -4,6 +4,7 @@ import logging
 import datetime
 from src.utils.config_manager import ConfigManager
 from src.utils.schedule_manager import ScheduleManager
+from src.utils.strings import BotStrings
 
 logger = logging.getLogger('chores-bot')
 
@@ -14,8 +15,11 @@ class ChoresCog(commands.Cog):
         self.config_manager = ConfigManager()
         self.schedule_manager = ScheduleManager(self.config_manager)
 
-        # Cache message IDs for reactions
+        # Cache message IDs for reactions (maps message_id -> (chore, flatmate_name))
         self.message_cache = {}
+
+        # Track if instructions have been sent
+        self.instructions_sent = False
 
     def cog_check(self, ctx):
         """Check if the command is being used in the chores channel."""
@@ -33,7 +37,7 @@ class ChoresCog(commands.Cog):
         """Show the current chore schedule."""
         assignments = self.schedule_manager.get_current_assignments()
         if not assignments:
-            await ctx.send("No chore schedule has been generated yet. Use `!chores next` to generate one.")
+            await ctx.send(BotStrings.CMD_NO_SCHEDULE)
             return
 
         # Create an embed to display the schedule
@@ -45,7 +49,7 @@ class ChoresCog(commands.Cog):
     async def next_schedule(self, ctx):
         """Generate and post the next chore schedule."""
         await self.post_schedule(ctx.channel)
-        await ctx.send("New chore schedule has been posted!")
+        await ctx.send(BotStrings.CMD_NEW_SCHEDULE)
 
     @chores.command(name="reset")
     @commands.has_role("Admin")  # You can customize this
@@ -53,6 +57,9 @@ class ChoresCog(commands.Cog):
         """Reset the chore rotation."""
         success, message = self.schedule_manager.reset_schedule()
         await ctx.send(message)
+        # Reset the message cache and instructions flag
+        self.message_cache = {}
+        self.instructions_sent = False
 
     @chores.command(name="config")
     async def show_config(self, ctx):
@@ -113,7 +120,7 @@ class ChoresCog(commands.Cog):
         await ctx.send(message)
 
     async def post_schedule(self, channel=None):
-        """Post the weekly chore schedule."""
+        """Post the weekly chore schedule with individual messages for each flatmate."""
         # Generate new schedule
         assignments = self.schedule_manager.generate_new_schedule()
         if not assignments:
@@ -131,33 +138,48 @@ class ChoresCog(commands.Cog):
                 logger.error(f"Chores channel not found: {channel_id}")
                 return
 
-        # Create an embed with the schedule
-        embed = self._create_schedule_embed(assignments)
+        # First, post a header message for the weekly schedule
+        await channel.send(BotStrings.SCHEDULE_HEADER)
 
-        # Post the schedule
-        message = await channel.send(
-            "🔔 **Weekly Chore Schedule** 🔔\n"
-            "React with the appropriate emoji to mark a chore as completed or to indicate you can't do it this week.",
-            embed=embed
-        )
+        # Then post instructions (only once)
+        if not self.instructions_sent:
+            instructions_message = await channel.send(BotStrings.REACTION_INSTRUCTIONS)
+            self.instructions_sent = True
 
-        # Add reaction emojis for interaction
+        # Clear previous message cache
+        self.message_cache = {}
+
+        # Send individual messages for each assignment
         emojis = self.config_manager.get_emoji()
-        await message.add_reaction(emojis["completed"])
-        await message.add_reaction(emojis["unavailable"])
+        for chore, flatmate_name in assignments.items():
+            flatmate = self.config_manager.get_flatmate_by_name(flatmate_name)
+            if not flatmate:
+                continue
 
-        # Cache the message ID for reaction handling
-        self.message_cache = {
-            "message_id": message.id,
-            "assignments": assignments
-        }
+            discord_id = flatmate["discord_id"]
+
+            # Create the assignment message
+            task_message = BotStrings.TASK_ASSIGNMENT.format(
+                mention=f"<@{discord_id}>",
+                chore=chore
+            )
+
+            # Send the message
+            message = await channel.send(task_message)
+
+            # Add reaction emojis for interaction
+            await message.add_reaction(emojis["completed"])
+            await message.add_reaction(emojis["unavailable"])
+
+            # Cache the message ID for reaction handling
+            self.message_cache[message.id] = (chore, flatmate_name)
 
         logger.info(f"Posted new schedule in channel {channel.name} ({channel.id})")
 
     def _create_schedule_embed(self, assignments):
         """Create an embed for the chore schedule."""
         embed = discord.Embed(
-            title="📋 Weekly Chore Schedule",
+            title=BotStrings.EMBED_SCHEDULE_TITLE,
             color=discord.Color.green(),
             timestamp=datetime.datetime.now()
         )
@@ -168,40 +190,35 @@ class ChoresCog(commands.Cog):
             flatmate = self.config_manager.get_flatmate_by_name(flatmate_name)
             if flatmate:
                 discord_id = flatmate["discord_id"]
-                value = f"🧹 Assigned to: <@{discord_id}>"
+                value = BotStrings.EMBED_TASK_ASSIGNED.format(mention=f"<@{discord_id}>")
             else:
-                value = f"🧹 Assigned to: {flatmate_name}"
+                value = BotStrings.EMBED_TASK_ASSIGNED.format(mention=flatmate_name)
 
             embed.add_field(name=f"**{chore}**", value=value, inline=False)
 
         # Add instructions for reactions
         emojis = self.config_manager.get_emoji()
         embed.add_field(
-            name="How to respond",
-            value=f"{emojis['completed']} - Mark as completed\n"
-                  f"{emojis['unavailable']} - I can't do it this week (will be reassigned)",
+            name=BotStrings.EMBED_HOW_TO_RESPOND,
+            value=BotStrings.EMBED_REACTIONS_GUIDE,
             inline=False
         )
 
         # Add footer with last updated time
-        embed.set_footer(text="Last updated")
+        embed.set_footer(text=BotStrings.EMBED_SCHEDULE_FOOTER)
 
         return embed
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload):
-        """Handle reactions to the chore schedule."""
+        """Handle reactions to chore assignment messages."""
         # Ignore bot reactions
         if payload.user_id == self.bot.user.id:
             return
 
-        # Check if this is a reaction to our schedule message
-        if not self.message_cache or payload.message_id != self.message_cache.get("message_id"):
+        # Check if this is a reaction to one of our tracked messages
+        if payload.message_id not in self.message_cache:
             return
-
-        # Get the emoji configuration
-        emojis = self.config_manager.get_emoji()
-        emoji_name = str(payload.emoji)
 
         # Get the channel
         channel = self.bot.get_channel(payload.channel_id)
@@ -222,6 +239,9 @@ class ChoresCog(commands.Cog):
         if not user:
             return
 
+        # Get the chore and assigned flatmate from our cache
+        chore, assigned_flatmate_name = self.message_cache[payload.message_id]
+
         # Get the flatmate from the user's Discord ID
         flatmate = self.config_manager.get_flatmate_by_discord_id(payload.user_id)
         if not flatmate:
@@ -229,56 +249,76 @@ class ChoresCog(commands.Cog):
             await message.remove_reaction(payload.emoji, user)
             return
 
-        # Get the assignments
-        assignments = self.message_cache.get("assignments", {})
-
-        # Find the chore assigned to this flatmate
-        assigned_chore = None
-        for chore, flatmate_name in assignments.items():
-            if flatmate_name == flatmate["name"]:
-                assigned_chore = chore
-                break
-
-        if not assigned_chore:
-            # Remove reaction if the flatmate has no assigned chore
+        # Check if this is the assigned flatmate
+        if flatmate["name"] != assigned_flatmate_name:
+            # Remove reaction if not the assigned flatmate
             await message.remove_reaction(payload.emoji, user)
-            await channel.send(f"{user.mention} You don't have any assigned chores this week.", delete_after=10)
+            await channel.send(
+                f"{user.mention} This is not your assigned chore.",
+                delete_after=10
+            )
             return
+
+        # Get the emoji configuration
+        emojis = self.config_manager.get_emoji()
+        emoji_name = str(payload.emoji)
 
         # Handle the reaction based on the emoji
         if emoji_name == emojis["completed"]:
             # Mark chore as completed
-            success, message_text = self.schedule_manager.mark_chore_completed(assigned_chore, flatmate["name"])
-            await channel.send(f"✅ {user.mention} has completed their chore: **{assigned_chore}**")
+            success, _ = self.schedule_manager.mark_chore_completed(chore, flatmate["name"])
+
+            if success:
+                # Send completion message
+                completion_msg = BotStrings.TASK_COMPLETED.format(
+                    mention=user.mention,
+                    chore=chore
+                )
+                await channel.send(completion_msg)
 
         elif emoji_name == emojis["unavailable"]:
-            # Reassign the chore
-            next_flatmate = self.schedule_manager.rotate_assignment(assigned_chore)
-            if next_flatmate:
+            # Mark the original flatmate as having voted
+            self.schedule_manager.add_voted_flatmate(flatmate["name"])
+
+            # Randomly reassign the chore
+            next_flatmate_name = self.schedule_manager.randomly_reassign_chore(
+                chore,
+                flatmate["name"]
+            )
+
+            if next_flatmate_name:
                 # Get the next flatmate's Discord ID
-                next_discord_id = None
-                next_flatmate_obj = self.config_manager.get_flatmate_by_name(next_flatmate)
-                if next_flatmate_obj:
-                    next_discord_id = next_flatmate_obj["discord_id"]
+                next_flatmate = self.config_manager.get_flatmate_by_name(next_flatmate_name)
 
-                # Send notification
-                if next_discord_id:
-                    await channel.send(
-                        f"❌ {user.mention} can't complete their chore this week.\n"
-                        f"**{assigned_chore}** has been reassigned to <@{next_discord_id}>."
-                    )
-                else:
-                    await channel.send(
-                        f"❌ {user.mention} can't complete their chore this week.\n"
-                        f"**{assigned_chore}** has been reassigned to {next_flatmate}."
-                    )
+                if next_flatmate:
+                    next_discord_id = next_flatmate["discord_id"]
 
-                # Update the embed with the new assignment
-                self.message_cache["assignments"][assigned_chore] = next_flatmate
-                embed = self._create_schedule_embed(self.message_cache["assignments"])
-                await message.edit(embed=embed)
+                    # Send reassignment notification
+                    reassign_msg = BotStrings.TASK_REASSIGNED_FULL.format(
+                        original_mention=user.mention,
+                        chore=chore,
+                        new_mention=f"<@{next_discord_id}>"
+                    )
+                    await channel.send(reassign_msg)
+
+                    # Create a new message for the reassigned chore
+                    new_task_msg = BotStrings.TASK_ASSIGNMENT.format(
+                        mention=f"<@{next_discord_id}>",
+                        chore=chore
+                    )
+                    new_message = await channel.send(new_task_msg)
+
+                    # Add reactions to the new message
+                    await new_message.add_reaction(emojis["completed"])
+                    await new_message.add_reaction(emojis["unavailable"])
+
+                    # Update our message cache
+                    self.message_cache[new_message.id] = (chore, next_flatmate_name)
+
+                    # Remove the old message from the cache
+                    self.message_cache.pop(payload.message_id, None)
             else:
-                await channel.send(f"Failed to reassign chore: {assigned_chore}")
+                await channel.send(BotStrings.ERR_REASSIGN_FAILED.format(chore=chore))
         else:
             # Remove unrelated reactions
             await message.remove_reaction(payload.emoji, user)
