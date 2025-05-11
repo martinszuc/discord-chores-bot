@@ -227,14 +227,8 @@ class ScheduleManager:
 
         score = skipped * 2 + reassigned - completed * 0.5
 
-        # If flatmate recently returned from vacation, give them higher priority
-        recently_returned = flatmate.get("recently_returned", False)
-        if recently_returned:
-            logger.debug(f"{flatmate['name']} recently returned from vacation, decreasing score by 5")
-            score -= 5
-
         logger.debug(
-            f"Priority score for {flatmate['name']}: {score} (completed: {completed}, skipped: {skipped}, reassigned: {reassigned}, recently_returned: {recently_returned})")
+            f"Priority score for {flatmate['name']}: {score} (completed: {completed}, skipped: {skipped}, reassigned: {reassigned})")
         return score
 
     def generate_new_schedule(self):
