@@ -781,38 +781,58 @@ class ChoresCog(commands.Cog):
             await message.remove_reaction(payload.emoji, user)
             return
 
-        # Check if this is the assigned flatmate
-        if flatmate["name"] != assigned_flatmate_name:
-            # Remove reaction if not the assigned flatmate
-            logger.warning(f"User {user.name} reacted to chore assigned to {assigned_flatmate_name}, removing reaction")
-            await message.remove_reaction(payload.emoji, user)
-            await channel.send(
-                f"{user.mention} This is not your assigned chore.",
-                delete_after=10
-            )
-            return
-
         # Get the emoji configuration
         emojis = self.config_manager.get_emoji()
         emoji_name = str(payload.emoji)
         logger.debug(f"Reaction emoji: {emoji_name}")
 
+        # Check if this is the assigned flatmate or someone else helping out
+        is_assigned_flatmate = flatmate["name"] == assigned_flatmate_name
+
         # Handle the reaction based on the emoji
         if emoji_name == emojis["completed"]:
-            # Mark chore as completed
-            logger.info(f"Marking chore '{chore}' as completed by {flatmate['name']}")
-            success, message_text = self.schedule_manager.mark_chore_completed(chore, flatmate["name"])
+            if is_assigned_flatmate:
+                # Mark chore as completed by assigned flatmate
+                logger.info(f"Marking chore '{chore}' as completed by {flatmate['name']}")
+                success, message_text = self.schedule_manager.mark_chore_completed(chore, flatmate["name"])
 
-            if success:
-                # Send completion message
-                completion_msg = BotStrings.TASK_COMPLETED.format(
-                    mention=user.mention,
-                    chore=chore
-                )
-                await channel.send(completion_msg)
-                logger.info(f"Chore '{chore}' marked as completed by {flatmate['name']}")
+                if success:
+                    # Send completion message
+                    completion_msg = BotStrings.TASK_COMPLETED.format(
+                        mention=user.mention,
+                        chore=chore
+                    )
+                    await channel.send(completion_msg)
+                    logger.info(f"Chore '{chore}' marked as completed by {flatmate['name']}")
+            else:
+                # Another flatmate is completing the chore for the assigned flatmate
+                logger.info(f"Flatmate {flatmate['name']} is completing chore '{chore}' for {assigned_flatmate_name}")
+
+                # Mark chore as completed
+                success, _ = self.schedule_manager.mark_chore_completed(chore, assigned_flatmate_name,
+                                                                        helper=flatmate["name"])
+
+                if success:
+                    # Get the assigned flatmate's discord mention
+                    assigned_flatmate = self.config_manager.get_flatmate_by_name(assigned_flatmate_name)
+                    assigned_mention = f"<@{assigned_flatmate['discord_id']}>" if assigned_flatmate else assigned_flatmate_name
+
+                    # Send helper completion message
+                    helper_msg = f"✅ {user.mention} has completed the chore **{chore}** for {assigned_mention}! What a hero! 🦸"
+                    await channel.send(helper_msg)
+                    logger.info(f"Chore '{chore}' completed by {flatmate['name']} for {assigned_flatmate_name}")
 
         elif emoji_name == emojis["unavailable"]:
+            if not is_assigned_flatmate:
+                # Only the assigned flatmate can mark as unavailable
+                logger.warning(f"User {user.name} tried to mark someone else's chore as unavailable")
+                await message.remove_reaction(payload.emoji, user)
+                await channel.send(
+                    f"{user.mention} You can only mark your own assigned chores as unavailable.",
+                    delete_after=10
+                )
+                return
+
             # Mark the original flatmate as having voted
             logger.info(f"Marking flatmate {flatmate['name']} as unavailable for chore '{chore}'")
             self.schedule_manager.add_voted_flatmate(flatmate["name"])

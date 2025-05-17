@@ -414,9 +414,20 @@ class ScheduleManager:
 
         return next_flatmate["name"]
 
-    def mark_chore_completed(self, chore, flatmate_name):
-        """Mark a chore as completed by a flatmate."""
-        logger.info(f"Marking chore '{chore}' as completed by {flatmate_name}")
+    def mark_chore_completed(self, chore, flatmate_name, helper=None):
+        """
+        Mark a chore as completed by a flatmate.
+
+        Args:
+            chore (str): The chore that was completed
+            flatmate_name (str): Name of the flatmate assigned to the chore
+            helper (str, optional): Name of the flatmate who helped complete the chore
+
+        Returns:
+            tuple: (success, message)
+        """
+        logger.info(f"Marking chore '{chore}' as completed by {flatmate_name}" +
+                    (f" with help from {helper}" if helper else ""))
 
         # Check if the chore exists and is assigned to the flatmate
         current_assignment = self.get_assignment_for_chore(chore)
@@ -439,17 +450,31 @@ class ScheduleManager:
         else:
             logger.debug(f"Chore '{chore}' not in pending list, possibly already completed")
 
-        # Mark flatmate as having voted
-        self.add_voted_flatmate(flatmate_name)
+        # If there's a helper, update their stats instead of the assigned flatmate
+        if helper:
+            # Update helper statistics
+            logger.info(f"Updating completion statistics for helper {helper}")
+            self.config_manager.update_flatmate_stats(helper, "completed")
 
-        # Update statistics
-        logger.info(f"Updating completion statistics for {flatmate_name}")
-        self.config_manager.update_flatmate_stats(flatmate_name, "completed")
+            # Mark helper as having voted
+            self.add_voted_flatmate(helper)
+
+            # We don't mark the original flatmate as having completed or voted
+            # This way they don't get a completion stat but also aren't penalized
+        else:
+            # Mark flatmate as having voted
+            self.add_voted_flatmate(flatmate_name)
+
+            # Update statistics for the assigned flatmate
+            logger.info(f"Updating completion statistics for {flatmate_name}")
+            self.config_manager.update_flatmate_stats(flatmate_name, "completed")
 
         self._save_schedule_data()
-        logger.info(f"Chore '{chore}' marked as completed by {flatmate_name}")
+        logger.info(f"Chore '{chore}' marked as completed" +
+                    (f" by {helper} for {flatmate_name}" if helper else f" by {flatmate_name}"))
 
-        return True, f"Chore '{chore}' marked as completed by {flatmate_name}"
+        return True, f"Chore '{chore}' marked as completed" + (
+            f" by {helper} for {flatmate_name}" if helper else f" by {flatmate_name}")
 
     def reset_schedule(self):
         """Reset the schedule data."""

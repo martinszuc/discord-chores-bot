@@ -9,6 +9,7 @@ class BotStrings:
     SCHEDULE_HEADER = "🔔 **Weekly SEX Schedule** 🔔"
     TASK_ASSIGNMENT = "Hey {mention}, your chore for this week is: **{chore}**"
     TASK_COMPLETED = "✅ {mention} has completed their chore: **{chore}**"
+    TASK_COMPLETED_FOR_OTHER = "✅ {helper_mention} has completed the chore **{chore}** for {assignee_mention}! What a hero! 🦸"
     TASK_UNAVAILABLE = "❌ {mention} can't complete their chore this week."
     TASK_REASSIGNED = "**{chore}** odteraz bude robic {mention}."
     TASK_REASSIGNED_FULL = "{original_mention} can't complete their chore this week.\n**{chore}** has been reassigned to {new_mention}."
