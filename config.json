@@ -33,11 +33,9 @@
     }
   ],
   "chores": [
-    "Kupelka",
-    "Zachod",
-    "Vysavanie",
-    "Zmyvanie",
-    "Kuchyňa"
+    "Kúpeľka",
+    "Záchod",
+    "Vysávanie a Zmývanie"
   ],
   "emoji": {
     "completed": "✅",
