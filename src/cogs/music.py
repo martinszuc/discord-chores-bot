@@ -78,9 +78,6 @@ class MusicCog(commands.Cog):
                 voice_client.play(transformed_source, after=lambda e: asyncio.run_coroutine_threadsafe(
                     self._song_finished(e, voice_client), self.bot.loop))
 
-                # Set a timer to disconnect after the duration
-                self.bot.loop.create_task(self._disconnect_after_duration(voice_client))
-
             except Exception as e:
                 logger.error(f"Error connecting to voice channel: {e}", exc_info=True)
                 if guild.voice_client:
@@ -91,6 +88,20 @@ class MusicCog(commands.Cog):
         except Exception as e:
             logger.error(f"Error in play_celebration: {e}", exc_info=True)
             self.is_busy = False
+
+    # Also modify the _song_finished method to ensure it releases the busy flag
+    async def _song_finished(self, error, voice_client):
+        """Called when the song finishes playing."""
+        if error:
+            logger.error(f"Error during playback: {error}")
+
+        # Only disconnect if the voice client is still connected and not already playing something else
+        if voice_client and voice_client.is_connected() and not voice_client.is_playing():
+            await voice_client.disconnect()
+            logger.info("Disconnected from voice channel after song finished playing")
+
+        # Make sure to release the busy flag
+        self.is_busy = False
 
     async def _find_voice_channel(self, guild):
         """Find a suitable voice channel to join."""
