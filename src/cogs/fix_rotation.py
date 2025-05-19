@@ -57,6 +57,74 @@ class FixRotationCog(commands.Cog):
             await interaction.response.send_message(f"❌ **Fix Failed**\n\n{message}")
             logger.warning(f"One-time rotation fix failed: {message}")
 
+    @choresfix.command(name="reassign")
+    @app_commands.describe(
+        chore="The chore to reassign",
+        new_assignee="The flatmate to reassign the chore to"
+    )
+    async def reassign_chore_no_penalty(self, interaction: discord.Interaction, chore: str, new_assignee: str):
+        """Reassign a chore to another flatmate without affecting stats."""
+        logger.info(
+            f"No-penalty reassign command invoked by {interaction.user.name} (ID: {interaction.user.id}), chore: {chore}, new_assignee: {new_assignee}")
+
+        # Get the chores cog to access schedule manager
+        chores_cog = self.bot.get_cog("ChoresCog")
+        if not chores_cog:
+            logger.error("Chores cog not found.")
+            await interaction.response.send_message("❌ Internal error: Chores cog not found.")
+            return
+
+        # Check if the chore exists
+        current_assignments = chores_cog.schedule_manager.get_current_assignments()
+        if chore not in current_assignments:
+            await interaction.response.send_message(
+                f"❌ Chore '{chore}' not found in current assignments. Available chores: {', '.join(current_assignments.keys())}")
+            return
+
+        # Check if the new assignee exists
+        flatmate = chores_cog.config_manager.get_flatmate_by_name(new_assignee)
+        if not flatmate:
+            # Get all flatmates for suggestion
+            all_flatmates = chores_cog.config_manager.get_flatmates()
+            flatmate_names = [f["name"] for f in all_flatmates]
+            await interaction.response.send_message(
+                f"❌ Flatmate '{new_assignee}' not found. Available flatmates: {', '.join(flatmate_names)}")
+            return
+
+        # Get the current assignee
+        current_assignee = current_assignments.get(chore)
+
+        # Perform the reassignment without updating statistics
+        success = chores_cog.schedule_manager.reassign_chore_without_penalty(chore, current_assignee, new_assignee)
+
+        if success:
+            await interaction.response.send_message(
+                f"✅ Chore '{chore}' has been reassigned from {current_assignee} to {new_assignee} without affecting statistics.")
+
+            # Get the chores channel to post notification
+            channel_id = chores_cog.config_manager.get_chores_channel_id()
+            channel = self.bot.get_channel(channel_id)
+
+            if channel and channel.id != interaction.channel_id:
+                # If we're not already in the chores channel, post there too
+                discord_id = flatmate.get("discord_id")
+                await channel.send(
+                    f"⚠️ **Admin Reassignment**\n\nChore '**{chore}**' has been reassigned from {current_assignee} to <@{discord_id}> by {interaction.user.mention}.")
+
+                # Add the standard reactions
+                emojis = chores_cog.config_manager.get_emoji()
+                message = await channel.send(f"Hey <@{discord_id}>, your chore for this week is: **{chore}**")
+                await message.add_reaction(emojis["completed"])
+                await message.add_reaction(emojis["unavailable"])
+
+                # Add message to the cache for reaction handling
+                chores_cog.message_cache[message.id] = (chore, new_assignee)
+
+            logger.info(f"Chore '{chore}' reassigned from {current_assignee} to {new_assignee} without penalty")
+        else:
+            await interaction.response.send_message(f"❌ Failed to reassign chore '{chore}'.")
+            logger.warning(f"Failed to reassign chore '{chore}' from {current_assignee} to {new_assignee}")
+
 
 async def setup(bot):
     logger.info("Setting up FixRotationCog")

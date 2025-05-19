@@ -616,3 +616,43 @@ class ScheduleManager:
 
         logger.info("One-time rotation fix applied successfully")
         return True, f"One-time fix applied. Next rotation will only include: {', '.join(non_completing_flatmates)}"
+
+    def reassign_chore_without_penalty(self, chore, current_assignee, new_assignee):
+        """
+        Reassign a chore from one flatmate to another without affecting their statistics.
+        This is an admin function for exceptional situations.
+
+        Args:
+            chore (str): The chore to reassign
+            current_assignee (str): Name of the current assignee
+            new_assignee (str): Name of the new assignee
+
+        Returns:
+            bool: True if reassignment was successful, False otherwise
+        """
+        logger.info(f"Admin reassigning chore '{chore}' from {current_assignee} to {new_assignee} without penalty")
+
+        # Check if chore exists in current assignments
+        if chore not in self.schedule_data.get("current_assignments", {}):
+            logger.warning(f"Chore '{chore}' not found in current assignments")
+            return False
+
+        # Check if current assignment matches
+        if self.schedule_data["current_assignments"][chore] != current_assignee:
+            logger.warning(
+                f"Current assignee mismatch: expected {current_assignee}, got {self.schedule_data['current_assignments'][chore]}")
+            return False
+
+        # Update the assignment without updating any statistics
+        old_assignee = self.schedule_data["current_assignments"][chore]
+        self.schedule_data["current_assignments"][chore] = new_assignee
+        logger.debug(f"Updated assignment for '{chore}': {old_assignee} -> {new_assignee}")
+
+        # If the chore is in pending chores, keep it there
+        # If it was already completed, it won't be in pending chores
+
+        self._save_schedule_data()
+        logger.info(
+            f"Chore '{chore}' successfully reassigned from {current_assignee} to {new_assignee} without penalty")
+
+        return True
