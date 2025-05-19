@@ -191,6 +191,18 @@ class HelpCog(commands.Cog):
             inline=False
         )
 
+        embed.add_field(
+            name="/chores show [detailed:True/False]",
+            value="Show the current chore schedule. Use detailed=True to post individual assignment messages with reaction buttons.",
+            inline=False
+        )
+
+        embed.add_field(
+            name="/chores next",
+            value="Generate and post the next chore schedule immediately with a summary of changes. (Admin only)",
+            inline=False
+        )
+
         await interaction.response.send_message(embed=embed)
         logger.info("Chores commands help displayed")
 

@@ -44,9 +44,10 @@ class ChoresCog(commands.Cog):
     chores = app_commands.Group(name="chores", description="Commands for managing chores")
 
     @chores.command(name="show")
-    async def show_schedule(self, interaction: discord.Interaction):
-        """Show the current chore schedule."""
-        logger.info(f"Show schedule command invoked by {interaction.user.name} (ID: {interaction.user.id})")
+    async def show_schedule(self, interaction: discord.Interaction, detailed: bool = False):
+        """Show the current chore schedule. Use detailed=True for a more detailed view."""
+        logger.info(
+            f"Show schedule command invoked by {interaction.user.name} (ID: {interaction.user.id}), detailed: {detailed}")
 
         assignments = self.schedule_manager.get_current_assignments()
         if not assignments:
@@ -60,18 +61,81 @@ class ChoresCog(commands.Cog):
         await interaction.response.send_message(embed=embed)
         logger.info("Schedule displayed successfully")
 
+        # If detailed is True, also post individual assignment messages with reactions
+        if detailed:
+            logger.debug("Posting detailed schedule with individual messages")
+            await interaction.followup.send("Posting detailed assignment messages...")
+
+            # Get the chores channel to post in
+            channel = interaction.channel
+            logger.debug(f"Using channel for detailed messages: {channel.name} (ID: {channel.id})")
+
+            # Post instructions
+            if not self.instructions_sent:
+                logger.debug("Posting instructions for detailed view")
+                await channel.send(BotStrings.REACTION_INSTRUCTIONS)
+                self.instructions_sent = True
+
+            # Send individual messages for each assignment with reaction emojis
+            emojis = self.config_manager.get_emoji()
+
+            for chore, flatmate_name in assignments.items():
+                flatmate = self.config_manager.get_flatmate_by_name(flatmate_name)
+                if not flatmate:
+                    logger.warning(f"Flatmate not found for assignment: {chore} -> {flatmate_name}")
+                    continue
+
+                discord_id = flatmate["discord_id"]
+                logger.debug(
+                    f"Creating assignment message for '{chore}' assigned to {flatmate_name} (ID: {discord_id})")
+
+                # Create the assignment message
+                task_message = BotStrings.TASK_ASSIGNMENT.format(
+                    mention=f"<@{discord_id}>",
+                    chore=chore
+                )
+
+                # Send message with reactions
+                message = await channel.send(task_message)
+                await message.add_reaction(emojis["completed"])
+                await message.add_reaction(emojis["unavailable"])
+
+                # Cache the message ID for reaction handling
+                self.message_cache[message.id] = (chore, flatmate_name)
+
+            logger.info(f"Posted detailed schedule with {len(assignments)} individual messages")
+
+    # Modification for src/cogs/chores.py
+    # Update the next_schedule method (around line 87)
+
     @chores.command(name="next")
     @app_commands.checks.has_permissions(manage_messages=True)
     async def next_schedule(self, interaction: discord.Interaction):
         """Generate and post the next chore schedule."""
         logger.info(f"Next schedule command invoked by {interaction.user.name} (ID: {interaction.user.id})")
 
+        # Store old assignments to show what changed
+        old_assignments = self.schedule_manager.get_current_assignments()
+        old_assignments_str = ", ".join(
+            [f"{chore}: {name}" for chore, name in old_assignments.items()]) if old_assignments else "None"
+
         await interaction.response.send_message("Generating new chore schedule...")
         logger.debug(f"Posting new schedule in channel: {interaction.channel.name} (ID: {interaction.channel.id})")
 
         await self.post_schedule(interaction.channel)
-        await interaction.followup.send(BotStrings.CMD_NEW_SCHEDULE)
-        logger.info("New schedule posted successfully")
+
+        # Get new assignments to show what changed
+        new_assignments = self.schedule_manager.get_current_assignments()
+        new_assignments_str = ", ".join(
+            [f"**{chore}**: {name}" for chore, name in new_assignments.items()]) if new_assignments else "None"
+
+        # Create a summary message
+        summary = f"**New schedule posted successfully!**\n\n"
+        summary += f"Previous assignments: {old_assignments_str}\n"
+        summary += f"New assignments: {new_assignments_str}"
+
+        await interaction.followup.send(summary)
+        logger.info("New schedule posted successfully with summary")
 
     @chores.command(name="reset")
     @app_commands.checks.has_permissions(administrator=True)
