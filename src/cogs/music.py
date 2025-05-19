@@ -102,7 +102,13 @@ class MusicCog(commands.Cog):
 
     async def _find_voice_channel(self, guild):
         """Find a suitable voice channel to join."""
-        # Try to find the preferred channel first if configured
+        # First, try to find the wiz-khalifa channel
+        ez_khalifa_channel = discord.utils.get(guild.voice_channels, name="ez-khalifa")
+        if ez_khalifa_channel:
+            logger.debug(f"Found wiz-khalifa voice channel")
+            return ez_khalifa_channel
+
+        # Then try to find the preferred channel if configured
         if self.preferred_channel:
             channel = discord.utils.get(guild.voice_channels, name=self.preferred_channel)
             if channel:

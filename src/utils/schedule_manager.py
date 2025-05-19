@@ -729,3 +729,50 @@ class ScheduleManager:
             f"Chore '{chore}' successfully reassigned from {current_assignee} to {new_assignee} without penalty")
 
         return True
+
+    def mark_chore_completed(self, chore, flatmate_name, helper=None):
+        """
+        Mark a chore as completed.
+
+        Args:
+            chore (str): The chore that was completed
+            flatmate_name (str): Name of the flatmate who was assigned the chore
+            helper (str, optional): Name of the flatmate who helped, if different from the assignee
+
+        Returns:
+            tuple: (success, message)
+        """
+        logger.info(f"Marking chore '{chore}' as completed by {flatmate_name}")
+
+        # Check if chore exists in current assignments
+        if chore not in self.schedule_data.get("current_assignments", {}):
+            logger.warning(f"Chore '{chore}' not found in current assignments")
+            return False, "Chore not found in current assignments"
+
+        # Check if assigned to the correct flatmate
+        if self.schedule_data["current_assignments"][chore] != flatmate_name:
+            logger.warning(f"Chore '{chore}' is not assigned to {flatmate_name}")
+            return False, f"This chore is assigned to {self.schedule_data['current_assignments'][chore]}, not {flatmate_name}"
+
+        # Check if the chore is still pending
+        if chore not in self.schedule_data.get("pending_chores", []):
+            logger.warning(f"Chore '{chore}' is already marked as completed")
+            return False, "This chore is already marked as completed"
+
+        # Remove from pending chores
+        self.schedule_data["pending_chores"].remove(chore)
+        logger.debug(f"Removed chore '{chore}' from pending chores")
+
+        # Update statistics for the assigned flatmate
+        self.config_manager.update_flatmate_stats(flatmate_name, "completed")
+
+        # If a helper completed the chore, update their statistics too
+        if helper and helper != flatmate_name:
+            logger.info(f"Helper {helper} completed chore for {flatmate_name}")
+            self.config_manager.update_flatmate_stats(helper, "completed")
+
+        # Save updated data
+        self._save_schedule_data()
+        logger.info(f"Chore '{chore}' marked as completed successfully")
+
+        return True, "Chore marked as completed"
