@@ -78,14 +78,6 @@ class MusicCog(commands.Cog):
                 voice_client.play(transformed_source, after=lambda e: asyncio.run_coroutine_threadsafe(
                     self._song_finished(e, voice_client), self.bot.loop))
 
-                # Announce in the chores channel
-                chores_channel_id = self.bot.config.get("chores_channel_id")
-                if chores_channel_id:
-                    chores_channel = guild.get_channel(chores_channel_id)
-                    if chores_channel:
-                        song_name = random_mp3.replace('.mp3', '').replace('_', ' ')
-                        await chores_channel.send(f"🎵 Celebrating with: **{song_name}**")
-
                 # Set a timer to disconnect after the duration
                 self.bot.loop.create_task(self._disconnect_after_duration(voice_client))
 
