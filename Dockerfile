@@ -11,7 +11,7 @@ ENV PYTHONUNBUFFERED=1
 
 # Install dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install -r requirements.txt
 
 # Create data directory
 RUN mkdir -p /app/data
