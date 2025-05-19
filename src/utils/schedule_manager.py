@@ -4,6 +4,9 @@ import os
 import datetime
 import random
 from pathlib import Path
+import discord
+
+from src.utils.strings import BotStrings
 
 logger = logging.getLogger('chores-bot')
 
@@ -451,66 +454,174 @@ class ScheduleManager:
 
         return next_flatmate["name"]
 
-    async def mark_chore_completed(self, chore, flatmate_name, helper=None):
-        """Mark a chore as completed by a flatmate."""
-        logger.info(f"Marking chore '{chore}' as completed by {flatmate_name}" +
-                    (f" with help from {helper}" if helper else ""))
+    async def _handle_chore_reaction(self, payload):
+        """Handle reactions to chore assignment messages."""
+        logger.info(f"Handling chore reaction from user ID: {payload.user_id}, emoji: {payload.emoji}")
 
-        # Check if the chore exists and is assigned to the flatmate
-        current_assignment = self.schedule_manager.get_assignment_for_chore(chore)
-        if not current_assignment:
-            logger.warning(f"No assignment found for chore: {chore}")
-            return False, f"No assignment found for chore: {chore}"
+        # Get the channel
+        channel = self.bot.get_channel(payload.channel_id)
+        if not channel:
+            logger.error(f"Channel not found: {payload.channel_id}")
+            return
 
-        if current_assignment != flatmate_name:
-            logger.warning(f"Chore '{chore}' is assigned to {current_assignment}, not {flatmate_name}")
-            return False, f"Chore is assigned to {current_assignment}, not {flatmate_name}"
+        # Get the message
+        try:
+            logger.debug(f"Fetching message: {payload.message_id}")
+            message = await channel.fetch_message(payload.message_id)
+            if not message:
+                logger.warning(f"Message not found: {payload.message_id}")
+                return
+        except discord.errors.NotFound:
+            logger.error(f"Message {payload.message_id} not found, possibly deleted")
+            return
+        except Exception as e:
+            logger.error(f"Failed to fetch message: {e}", exc_info=True)
+            return
 
-        # Remove from pending chores
-        if "pending_chores" not in self.schedule_manager.schedule_data:
-            logger.debug("Initializing pending_chores list")
-            self.schedule_manager.schedule_data["pending_chores"] = []
+        # Get the user who reacted
+        user = self.bot.get_user(payload.user_id)
+        if not user:
+            logger.warning(f"User not found: {payload.user_id}")
+            return
 
-        if chore in self.schedule_manager.schedule_data["pending_chores"]:
-            logger.debug(f"Removing '{chore}' from pending chores")
-            self.schedule_manager.schedule_data["pending_chores"].remove(chore)
+        # Get the chore and assigned flatmate from our cache
+        chore, assigned_flatmate_name = self.message_cache[payload.message_id]
+        logger.debug(f"Cached assignment: chore '{chore}' assigned to {assigned_flatmate_name}")
+
+        # Get the flatmate from the user's Discord ID
+        flatmate = self.config_manager.get_flatmate_by_discord_id(payload.user_id)
+        if not flatmate:
+            # Remove reaction if the user is not a flatmate
+            logger.warning(f"User {user.name} (ID: {payload.user_id}) is not a flatmate, removing reaction")
+            await message.remove_reaction(payload.emoji, user)
+            return
+
+        # Get the emoji configuration
+        emojis = self.config_manager.get_emoji()
+        emoji_name = str(payload.emoji)
+        logger.debug(f"Reaction emoji: {emoji_name}")
+
+        # Check if this is the assigned flatmate or someone else helping out
+        is_assigned_flatmate = flatmate["name"] == assigned_flatmate_name
+
+        # Handle the reaction based on the emoji
+        if emoji_name == emojis["completed"]:
+            if is_assigned_flatmate:
+                # Mark chore as completed by assigned flatmate
+                logger.info(f"Marking chore '{chore}' as completed by {flatmate['name']}")
+                success, message_text = self.schedule_manager.mark_chore_completed(chore, flatmate["name"])
+
+                if success:
+                    # Send completion message
+                    completion_msg = BotStrings.TASK_COMPLETED.format(
+                        mention=user.mention,
+                        chore=chore
+                    )
+                    await channel.send(completion_msg)
+                    logger.info(f"Chore '{chore}' marked as completed by {flatmate['name']}")
+
+                    # Play celebration music
+                    music_cog = self.bot.get_cog("MusicCog")
+                    if music_cog:
+                        logger.info("Triggering music celebration")
+                        await music_cog.play_celebration(channel.guild)
+                    else:
+                        logger.warning("MusicCog not found, cannot play celebration music")
+            else:
+                # Another flatmate is completing the chore for the assigned flatmate
+                logger.info(f"Flatmate {flatmate['name']} is completing chore '{chore}' for {assigned_flatmate_name}")
+
+                # Mark chore as completed
+                success, _ = self.mark_chore_completed(chore, assigned_flatmate_name,
+                                                                        helper=flatmate["name"])
+
+                if success:
+                    # Get the assigned flatmate's discord mention
+                    assigned_flatmate = self.config_manager.get_flatmate_by_name(assigned_flatmate_name)
+                    assigned_mention = f"<@{assigned_flatmate['discord_id']}>" if assigned_flatmate else assigned_flatmate_name
+
+                    # Send helper completion message
+                    helper_msg = f"✅ {user.mention} has completed the chore **{chore}** for {assigned_mention}! What a hero! 🦸"
+                    await channel.send(helper_msg)
+                    logger.info(f"Chore '{chore}' completed by {flatmate['name']} for {assigned_flatmate_name}")
+
+                    # Play celebration music
+                    music_cog = self.bot.get_cog("MusicCog")
+                    if music_cog:
+                        logger.info("Triggering music celebration")
+                        await music_cog.play_celebration(channel.guild)
+                    else:
+                        logger.warning("MusicCog not found, cannot play celebration music")
+
+        elif emoji_name == emojis["unavailable"]:
+            # Rest of your unavailable reaction handling...
+            if not is_assigned_flatmate:
+                # Only the assigned flatmate can mark as unavailable
+                logger.warning(f"User {user.name} tried to mark someone else's chore as unavailable")
+                await message.remove_reaction(payload.emoji, user)
+                await channel.send(
+                    f"{user.mention} You can only mark your own assigned chores as unavailable.",
+                    delete_after=10
+                )
+                return
+
+            # Mark the original flatmate as having voted
+            logger.info(f"Marking flatmate {flatmate['name']} as unavailable for chore '{chore}'")
+            self.add_voted_flatmate(flatmate["name"])
+
+            # Randomly reassign the chore
+            logger.debug(f"Randomly reassigning chore '{chore}' from {flatmate['name']}")
+            next_flatmate_name = self.randomly_reassign_chore(
+                chore,
+                flatmate["name"]
+            )
+
+            if next_flatmate_name:
+                # Get the next flatmate's Discord ID
+                next_flatmate = self.config_manager.get_flatmate_by_name(next_flatmate_name)
+
+                if next_flatmate:
+                    next_discord_id = next_flatmate["discord_id"]
+                    logger.debug(f"Chore reassigned to {next_flatmate_name} (ID: {next_discord_id})")
+
+                    # Send reassignment notification
+                    reassign_msg = BotStrings.TASK_REASSIGNED_FULL.format(
+                        original_mention=user.mention,
+                        chore=chore,
+                        new_mention=f"<@{next_discord_id}>"
+                    )
+                    await channel.send(reassign_msg)
+
+                    # Create a new message for the reassigned chore
+                    new_task_msg = BotStrings.TASK_ASSIGNMENT.format(
+                        mention=f"<@{next_discord_id}>",
+                        chore=chore
+                    )
+                    new_message = await channel.send(new_task_msg)
+                    logger.debug(f"Created new assignment message, ID: {new_message.id}")
+
+                    # Add reactions to the new message
+                    await new_message.add_reaction(emojis["completed"])
+                    await new_message.add_reaction(emojis["unavailable"])
+                    logger.debug(f"Added reactions to new message {new_message.id}")
+
+                    # Update our message cache
+                    self.message_cache[new_message.id] = (chore, next_flatmate_name)
+                    logger.debug(f"Cached new message ID {new_message.id} for reassigned chore")
+
+                    # Remove the old message from the cache
+                    self.message_cache.pop(payload.message_id, None)
+                    logger.debug(f"Removed old message ID {payload.message_id} from cache")
+
+                    logger.info(
+                        f"Chore '{chore}' successfully reassigned from {flatmate['name']} to {next_flatmate_name}")
+            else:
+                logger.warning(f"Failed to reassign chore '{chore}'")
+                await channel.send(BotStrings.ERR_REASSIGN_FAILED.format(chore=chore))
         else:
-            logger.debug(f"Chore '{chore}' not in pending list, possibly already completed")
-
-        # If there's a helper, update their stats instead of the assigned flatmate
-        if helper:
-            # Update helper statistics
-            logger.info(f"Updating completion statistics for helper {helper}")
-            self.config_manager.update_flatmate_stats(helper, "completed")
-
-            # Mark helper as having voted
-            self.schedule_manager.add_voted_flatmate(helper)
-
-            # We don't mark the original flatmate as having completed or voted
-            # This way they don't get a completion stat but also aren't penalized
-        else:
-            # Mark flatmate as having voted
-            self.schedule_manager.add_voted_flatmate(flatmate_name)
-
-            # Update statistics for the assigned flatmate
-            logger.info(f"Updating completion statistics for {flatmate_name}")
-            self.config_manager.update_flatmate_stats(flatmate_name, "completed")
-
-        self.schedule_manager._save_schedule_data()
-        logger.info(f"Chore '{chore}' marked as completed" +
-                    (f" by {helper} for {flatmate_name}" if helper else f" by {flatmate_name}"))
-
-        # Play celebration music
-        music_cog = self.bot.get_cog("MusicCog")
-        if music_cog:
-            logger.info("Triggering music celebration")
-            guild = self.bot.get_guild(self.bot.guilds[0].id)  # Get the first guild
-            await music_cog.play_celebration(guild)
-        else:
-            logger.warning("MusicCog not found, cannot play celebration music")
-
-        return True, f"Chore '{chore}' marked as completed" + (
-            f" by {helper} for {flatmate_name}" if helper else f" by {flatmate_name}")
+            # Remove unrelated reactions
+            logger.debug(f"Removing unrelated reaction {emoji_name} from message {payload.message_id}")
+            await message.remove_reaction(payload.emoji, user)
 
     def reset_schedule(self):
         """Reset the schedule data."""

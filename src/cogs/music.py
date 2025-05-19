@@ -19,10 +19,19 @@ class MusicCog(commands.Cog):
             os.makedirs(self.music_folder)
             logger.info(f"Created music folder: {self.music_folder}")
 
-        logger.info("MusicCog initialized")
+        # Load configuration
+        self.enabled = self.bot.config.get("music_celebration", {}).get("enabled", True)
+        self.preferred_channel = self.bot.config.get("music_celebration", {}).get("channel_name", None)
+        self.duration = self.bot.config.get("music_celebration", {}).get("duration", 30)  # Max seconds to play
+
+        logger.info(f"MusicCog initialized (enabled: {self.enabled})")
 
     async def play_celebration(self, guild):
         """Play a random song to celebrate a completed chore."""
+        if not self.enabled:
+            logger.debug("Music celebration is disabled in config")
+            return
+
         if self.is_busy:
             logger.debug("Already playing a celebration, skipping")
             return
@@ -30,10 +39,10 @@ class MusicCog(commands.Cog):
         self.is_busy = True
 
         try:
-            # Find the "wiz khalifa" voice channel
-            voice_channel = discord.utils.get(guild.voice_channels, name="wiz khalifa")
+            # Find a voice channel to join
+            voice_channel = await self._find_voice_channel(guild)
             if not voice_channel:
-                logger.warning("Voice channel 'wiz khalifa' not found")
+                logger.warning("No suitable voice channel found")
                 self.is_busy = False
                 return
 
@@ -51,9 +60,10 @@ class MusicCog(commands.Cog):
 
             # Connect to the voice channel
             try:
-                # Check if already connected to a voice channel
+                # Check if already connected to a voice channel in this guild
                 if guild.voice_client:
                     await guild.voice_client.disconnect()
+                    await asyncio.sleep(1)  # Brief delay to ensure clean disconnection
 
                 voice_client = await voice_channel.connect()
                 logger.info(f"Connected to voice channel: {voice_channel.name}")
@@ -61,8 +71,11 @@ class MusicCog(commands.Cog):
                 # Create FFmpeg audio source
                 audio_source = discord.FFmpegPCMAudio(file_path)
 
-                # Play the audio
-                voice_client.play(audio_source, after=lambda e: asyncio.run_coroutine_threadsafe(
+                # Play the audio with a volume transformer to adjust volume
+                volume = self.bot.config.get("music_celebration", {}).get("volume", 0.5)  # Default 50% volume
+                transformed_source = discord.PCMVolumeTransformer(audio_source, volume=volume)
+
+                voice_client.play(transformed_source, after=lambda e: asyncio.run_coroutine_threadsafe(
                     self._song_finished(e, voice_client), self.bot.loop))
 
                 # Announce in the chores channel
@@ -70,10 +83,16 @@ class MusicCog(commands.Cog):
                 if chores_channel_id:
                     chores_channel = guild.get_channel(chores_channel_id)
                     if chores_channel:
-                        await chores_channel.send(f"🎵 Celebrating with: **{random_mp3.replace('.mp3', '')}**")
+                        song_name = random_mp3.replace('.mp3', '').replace('_', ' ')
+                        await chores_channel.send(f"🎵 Celebrating with: **{song_name}**")
+
+                # Set a timer to disconnect after the duration
+                self.bot.loop.create_task(self._disconnect_after_duration(voice_client))
 
             except Exception as e:
                 logger.error(f"Error connecting to voice channel: {e}", exc_info=True)
+                if guild.voice_client:
+                    await guild.voice_client.disconnect()
                 self.is_busy = False
                 return
 
@@ -81,20 +100,54 @@ class MusicCog(commands.Cog):
             logger.error(f"Error in play_celebration: {e}", exc_info=True)
             self.is_busy = False
 
+    async def _find_voice_channel(self, guild):
+        """Find a suitable voice channel to join."""
+        # Try to find the preferred channel first if configured
+        if self.preferred_channel:
+            channel = discord.utils.get(guild.voice_channels, name=self.preferred_channel)
+            if channel:
+                logger.debug(f"Found preferred voice channel: {channel.name}")
+                return channel
+
+        # Fall back to any voice channel with members
+        for channel in guild.voice_channels:
+            if len(channel.members) > 0:
+                logger.debug(f"Found voice channel with members: {channel.name}")
+                return channel
+
+        # If no channel with members, just use the first voice channel
+        if guild.voice_channels:
+            logger.debug(f"Using first available voice channel: {guild.voice_channels[0].name}")
+            return guild.voice_channels[0]
+
+        # No voice channels found
+        logger.warning("No voice channels found in the guild")
+        return None
+
     async def _song_finished(self, error, voice_client):
         """Called when the song finishes playing."""
         if error:
             logger.error(f"Error during playback: {error}")
 
-        # Wait a moment before disconnecting
-        await asyncio.sleep(1)
-
-        # Disconnect from the voice channel
-        if voice_client and voice_client.is_connected():
+        # Only disconnect if the voice client is still connected and not already playing something else
+        if voice_client and voice_client.is_connected() and not voice_client.is_playing():
             await voice_client.disconnect()
             logger.info("Disconnected from voice channel after playing celebration")
 
         self.is_busy = False
+
+    async def _disconnect_after_duration(self, voice_client):
+        """Disconnect after max duration to avoid playing too long."""
+        try:
+            await asyncio.sleep(self.duration)
+            if voice_client and voice_client.is_connected():
+                voice_client.stop()
+                await voice_client.disconnect()
+                logger.info(f"Disconnected after maximum duration ({self.duration}s)")
+                self.is_busy = False
+        except Exception as e:
+            logger.error(f"Error in disconnect timer: {e}", exc_info=True)
+            self.is_busy = False
 
 
 async def setup(bot):
