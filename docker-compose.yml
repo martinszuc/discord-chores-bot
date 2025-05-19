@@ -11,6 +11,7 @@ services:
     volumes:
       - ./config.json:/app/config.json
       - ./data:/app/data
+      - ./music:/app/music
     environment:
       - TZ=Europe/Bratislava
     healthcheck:
