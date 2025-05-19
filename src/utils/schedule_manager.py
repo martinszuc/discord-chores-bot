@@ -34,6 +34,7 @@ class ScheduleManager:
                 default_data = {
                     "last_posted": None,
                     "current_assignments": {},
+                    "previous_assignments": {},  # Add storage for previous week's assignments
                     "rotation_indices": {},
                     "voted_flatmates": [],  # Track flatmates who have already voted
                     "pending_chores": [],  # Track chores that haven't been completed
@@ -56,6 +57,7 @@ class ScheduleManager:
         default_data = {
             "last_posted": None,
             "current_assignments": {},
+            "previous_assignments": {},  # Add storage for previous week's assignments
             "rotation_indices": {},
             "voted_flatmates": [],
             "pending_chores": [],
@@ -110,6 +112,13 @@ class ScheduleManager:
         logger.debug("Getting current chore assignments")
         assignments = self.schedule_data.get("current_assignments", {})
         logger.debug(f"Current assignments: {assignments}")
+        return assignments
+
+    def get_previous_assignments(self):
+        """Get the previous week's chore assignments."""
+        logger.debug("Getting previous chore assignments")
+        assignments = self.schedule_data.get("previous_assignments", {})
+        logger.debug(f"Previous assignments: {assignments}")
         return assignments
 
     def get_pending_chores(self):
@@ -232,8 +241,26 @@ class ScheduleManager:
         return score
 
     def generate_new_schedule(self):
-        """Generate a new chore schedule using the priority system and difficulty balancing."""
+        """Generate a new chore schedule using the priority system and difficulty balancing,
+        while ensuring rotation between weeks.
+        """
         logger.info("Generating new chore schedule")
+
+        # Store current assignments as previous before generating new ones
+        current_assignments = self.get_current_assignments()
+        if current_assignments:
+            logger.debug(f"Storing current assignments as previous: {current_assignments}")
+            self.schedule_data["previous_assignments"] = current_assignments.copy()
+
+        # Get previous assignments to avoid repetition
+        previous_assignments = self.get_previous_assignments()
+        logger.debug(f"Previous assignments: {previous_assignments}")
+
+        # Create inverse mapping: flatmate -> previous chore
+        previous_flatmate_chores = {}
+        for chore, flatmate in previous_assignments.items():
+            previous_flatmate_chores[flatmate] = chore
+        logger.debug(f"Previous flatmate -> chore mapping: {previous_flatmate_chores}")
 
         # Get active flatmates (not on vacation)
         all_active_flatmates = self.config_manager.get_active_flatmates()
@@ -291,32 +318,79 @@ class ScheduleManager:
         # Assign chores, starting with the most difficult chores
         new_assignments = {}
         flatmate_difficulty_sum = {f["name"]: 0 for f in flatmates}
+        assigned_flatmates = set()  # Track which flatmates have been assigned
 
         logger.info("Beginning chore assignment process")
+
+        # First pass: Try to assign each chore to someone who didn't have it last week
         for chore in sorted_chores:
             # Get difficulty of this chore
             chore_difficulty = self.config_manager.get_chore_details(chore).get("difficulty", 1)
             logger.debug(f"Assigning chore: {chore} (difficulty: {chore_difficulty})")
 
-            # Find flatmate with lowest total difficulty so far
-            sorted_by_load = sorted(
-                sorted_flatmates,
-                key=lambda f: flatmate_difficulty_sum[f["name"]]
-            )
+            # Find previous assignee of this chore
+            previous_assignee = previous_assignments.get(chore)
+            logger.debug(f"Previous assignee for '{chore}': {previous_assignee}")
 
-            load_info = {f['name']: flatmate_difficulty_sum[f['name']] for f in sorted_by_load[:3]}
-            logger.debug(f"Current flatmate loads (top 3): {load_info}")
+            # Find eligible flatmates (those who don't have an assignment yet and didn't have this chore last week)
+            eligible_flatmates = [
+                f for f in sorted_flatmates
+                if f["name"] not in assigned_flatmates and f["name"] != previous_assignee
+            ]
 
-            # Assign to flatmate with lowest load
-            assigned_flatmate = sorted_by_load[0]
-            new_assignments[chore] = assigned_flatmate["name"]
-            logger.info(f"Assigned '{chore}' to {assigned_flatmate['name']}")
+            if not eligible_flatmates:
+                # If no eligible flatmates, use anyone who hasn't been assigned yet
+                eligible_flatmates = [f for f in sorted_flatmates if f["name"] not in assigned_flatmates]
+                logger.debug(
+                    f"No eligible flatmates who didn't have this chore last week, falling back to {len(eligible_flatmates)} unassigned flatmates")
 
-            # Update their total difficulty
-            old_load = flatmate_difficulty_sum[assigned_flatmate["name"]]
-            flatmate_difficulty_sum[assigned_flatmate["name"]] += chore_difficulty
-            new_load = flatmate_difficulty_sum[assigned_flatmate["name"]]
-            logger.debug(f"Updated load for {assigned_flatmate['name']}: {old_load} -> {new_load}")
+            if eligible_flatmates:
+                # Sort by current load
+                sorted_by_load = sorted(
+                    eligible_flatmates,
+                    key=lambda f: flatmate_difficulty_sum[f["name"]]
+                )
+
+                # Assign to flatmate with lowest load
+                assigned_flatmate = sorted_by_load[0]
+                new_assignments[chore] = assigned_flatmate["name"]
+                assigned_flatmates.add(assigned_flatmate["name"])
+
+                # Update their total difficulty
+                old_load = flatmate_difficulty_sum[assigned_flatmate["name"]]
+                flatmate_difficulty_sum[assigned_flatmate["name"]] += chore_difficulty
+                new_load = flatmate_difficulty_sum[assigned_flatmate["name"]]
+
+                logger.info(f"Assigned '{chore}' to {assigned_flatmate['name']} (previous: {previous_assignee})")
+                logger.debug(f"Updated load for {assigned_flatmate['name']}: {old_load} -> {new_load}")
+            else:
+                logger.warning(f"No eligible flatmates for chore: {chore}")
+
+        # Second pass: Assign any remaining chores (should only happen if more chores than flatmates)
+        remaining_chores = [c for c in sorted_chores if c not in new_assignments]
+        if remaining_chores:
+            logger.debug(f"Assigning {len(remaining_chores)} remaining chores: {remaining_chores}")
+
+            for chore in remaining_chores:
+                chore_difficulty = self.config_manager.get_chore_details(chore).get("difficulty", 1)
+
+                # Sort all flatmates by current load
+                sorted_by_load = sorted(
+                    sorted_flatmates,
+                    key=lambda f: flatmate_difficulty_sum[f["name"]]
+                )
+
+                # Assign to flatmate with lowest load
+                assigned_flatmate = sorted_by_load[0]
+                new_assignments[chore] = assigned_flatmate["name"]
+
+                # Update their total difficulty
+                old_load = flatmate_difficulty_sum[assigned_flatmate["name"]]
+                flatmate_difficulty_sum[assigned_flatmate["name"]] += chore_difficulty
+                new_load = flatmate_difficulty_sum[assigned_flatmate["name"]]
+
+                logger.info(f"Assigned remaining chore '{chore}' to {assigned_flatmate['name']}")
+                logger.debug(f"Updated load for {assigned_flatmate['name']}: {old_load} -> {new_load}")
 
         # Save new assignments
         logger.info(f"Final assignments: {new_assignments}")
@@ -482,6 +556,7 @@ class ScheduleManager:
         self.schedule_data = {
             "last_posted": None,
             "current_assignments": {},
+            "previous_assignments": {},
             "rotation_indices": {},
             "voted_flatmates": [],
             "pending_chores": [],
@@ -490,3 +565,54 @@ class ScheduleManager:
         self._save_schedule_data()
         logger.info("Schedule has been reset")
         return True, "Schedule has been reset"
+
+    def special_one_time_rotation_fix(self):
+        """One-time fix to ensure people who completed tasks last week
+        are not assigned in the next rotation.
+        """
+        logger.info("Running special one-time rotation fix")
+
+        # Get current assignments
+        current_assignments = self.get_current_assignments()
+        if not current_assignments:
+            logger.warning("No current assignments to fix")
+            return False, "No current assignments to fix"
+
+        # Get the list of people who completed their tasks (not in pending chores)
+        pending_chores = self.get_pending_chores()
+        logger.debug(f"Current pending chores: {pending_chores}")
+
+        completed_flatmates = []
+        for chore, flatmate in current_assignments.items():
+            if chore not in pending_chores:
+                # If the chore is not pending, it was completed
+                logger.debug(f"Flatmate {flatmate} completed chore '{chore}'")
+                completed_flatmates.append(flatmate)
+
+        logger.info(f"Flatmates who completed tasks: {completed_flatmates}")
+
+        # Get all active flatmates
+        all_active_flatmates = self.config_manager.get_active_flatmates()
+
+        # Find flatmates who didn't complete tasks
+        non_completing_flatmates = [f["name"] for f in all_active_flatmates
+                                    if f["name"] not in completed_flatmates]
+
+        logger.info(f"Flatmates who didn't complete tasks: {non_completing_flatmates}")
+
+        if len(non_completing_flatmates) < len(self.config_manager.get_chores()):
+            logger.warning("Not enough non-completing flatmates for all chores")
+            return False, "Not enough flatmates who didn't complete tasks for all chores"
+
+        # Exclude everyone except the non-completing flatmates from next rotation
+        for flatmate in all_active_flatmates:
+            if flatmate["name"] not in non_completing_flatmates:
+                self.exclude_from_next_rotation(flatmate["name"])
+                logger.info(f"Excluded {flatmate['name']} from next rotation as they completed their task")
+
+        # Store current assignments as previous before next generation
+        self.schedule_data["previous_assignments"] = current_assignments.copy()
+        self._save_schedule_data()
+
+        logger.info("One-time rotation fix applied successfully")
+        return True, f"One-time fix applied. Next rotation will only include: {', '.join(non_completing_flatmates)}"

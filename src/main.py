@@ -103,6 +103,14 @@ class ChoresBot(commands.Bot):
         except Exception as e:
             logger.error(f"Failed to load help cog: {e}", exc_info=True)
 
+        # Load the fix rotation cog
+        try:
+            await self.load_extension("src.cogs.fix_rotation")
+            loaded_cogs.append("fix_rotation")
+            logger.info("Loaded fix_rotation cog")
+        except Exception as e:
+            logger.error(f"Failed to load fix_rotation cog: {e}", exc_info=True)
+
         logger.info(f"Cog loading completed. Loaded cogs: {', '.join(loaded_cogs)}")
 
         # Schedule the first chore post
