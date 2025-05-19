@@ -53,8 +53,20 @@ class MusicCog(commands.Cog):
                 self.is_busy = False
                 return
 
-            # Select a random MP3 file
-            random_mp3 = random.choice(mp3_files)
+            # Select a random MP3 file, but avoid repeating the last one if possible
+            if len(mp3_files) > 1 and self.last_played in mp3_files:
+                # If we have more than one song and the last played song is still in our list
+                # Make a new list without the last played song
+                available_files = [f for f in mp3_files if f != self.last_played]
+                random_mp3 = random.choice(available_files)
+                logger.debug(f"Avoided repeating last song: {self.last_played}")
+            else:
+                # Otherwise just pick a random song
+                random_mp3 = random.choice(mp3_files)
+
+            # Remember this song for next time
+            self.last_played = random_mp3
+
             file_path = os.path.join(self.music_folder, random_mp3)
             logger.info(f"Selected song for celebration: {random_mp3}")
 
