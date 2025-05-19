@@ -105,4 +105,4 @@ venv.bak/
 *.swo
 
 # Bot specific
-config.json
+config.example.json
