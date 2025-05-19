@@ -226,19 +226,9 @@ class ConfigManager:
         logger.debug(f"Found {len(chores)} chores")
         return chores
 
-    def get_chore_details(self, chore_name):
-        """Get details of a specific chore."""
-        logger.debug(f"Getting details for chore: {chore_name}")
-        chores_with_details = self.config.get("chores_details", {})
-        if chore_name in chores_with_details:
-            logger.debug(f"Found details for chore {chore_name}: {chores_with_details[chore_name]}")
-            return chores_with_details[chore_name]
-        logger.debug(f"No details found for chore {chore_name}, returning default")
-        return {"difficulty": 1}  # Default difficulty
-
-    def add_chore(self, chore_name, difficulty=1):
+    def add_chore(self, chore_name):
         """Add a new chore."""
-        logger.info(f"Adding new chore: {chore_name} with difficulty: {difficulty}")
+        logger.info(f"Adding new chore: {chore_name}")
         chores = self.get_chores()
         if chore_name in chores:
             logger.warning(f"Attempted to add duplicate chore: {chore_name}")
@@ -248,18 +238,8 @@ class ConfigManager:
         chores.append(chore_name)
         self.config["chores"] = chores
 
-        # Initialize chore details
-        if "chores_details" not in self.config:
-            logger.debug("Initializing chores_details in config")
-            self.config["chores_details"] = {}
-
-        # Set difficulty
-        self.config["chores_details"][chore_name] = {
-            "difficulty": difficulty
-        }
-
         self.save_config()
-        logger.info(f"Chore added successfully: {chore_name} with difficulty {difficulty}")
+        logger.info(f"Chore added successfully: {chore_name}")
         return True, "Chore added successfully"
 
     def remove_chore(self, chore_name):
@@ -274,38 +254,9 @@ class ConfigManager:
         chores.remove(chore_name)
         self.config["chores"] = chores
 
-        # Remove from details if exists
-        if "chores_details" in self.config and chore_name in self.config["chores_details"]:
-            logger.debug(f"Removing details for chore: {chore_name}")
-            del self.config["chores_details"][chore_name]
-
         self.save_config()
         logger.info(f"Chore removed successfully: {chore_name}")
         return True, "Chore removed successfully"
-
-    def set_chore_difficulty(self, chore_name, difficulty):
-        """Set the difficulty level for a chore."""
-        logger.info(f"Setting difficulty for chore {chore_name} to {difficulty}")
-        if chore_name not in self.get_chores():
-            logger.warning(f"Attempted to set difficulty for non-existent chore: {chore_name}")
-            return False, "Chore not found"
-
-        # Initialize chores_details if not exists
-        if "chores_details" not in self.config:
-            logger.debug("Initializing chores_details in config")
-            self.config["chores_details"] = {}
-
-        # Initialize chore details if not exists
-        if chore_name not in self.config["chores_details"]:
-            logger.debug(f"Initializing details for chore: {chore_name}")
-            self.config["chores_details"][chore_name] = {}
-
-        # Update difficulty
-        old_difficulty = self.config["chores_details"][chore_name].get("difficulty", 1)
-        self.config["chores_details"][chore_name]["difficulty"] = difficulty
-        self.save_config()
-        logger.info(f"Difficulty updated for {chore_name}: {old_difficulty} -> {difficulty}")
-        return True, f"Difficulty for {chore_name} set to {difficulty}"
 
     def get_posting_schedule(self):
         """Get the posting day and time."""
@@ -369,12 +320,7 @@ class ConfigManager:
         logger.debug("Getting emoji configuration")
         default_emoji = {
             "completed": "✅",
-            "unavailable": "❌",
-            "difficulty_1": "1️⃣",
-            "difficulty_2": "2️⃣",
-            "difficulty_3": "3️⃣",
-            "difficulty_4": "4️⃣",
-            "difficulty_5": "5️⃣"
+            "unavailable": "❌"
         }
 
         emoji_config = self.config.get("emoji", default_emoji)

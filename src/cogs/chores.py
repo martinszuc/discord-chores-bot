@@ -115,13 +115,8 @@ class ChoresCog(commands.Cog):
         ])
         embed.add_field(name="Flatmates", value=flatmates_str or "None", inline=False)
 
-        # Add chores with difficulty
-        chores_str = ""
-        for chore in chores:
-            difficulty = self.config_manager.get_chore_details(chore).get("difficulty", 1)
-            difficulty_stars = "⭐" * difficulty
-            chores_str += f"• {chore} ({difficulty_stars})\n"
-
+        # Add chores - no difficulty displayed
+        chores_str = "\n".join([f"• {chore}" for chore in chores])
         embed.add_field(name="Chores", value=chores_str or "None", inline=False)
 
         # Add schedule
@@ -184,20 +179,14 @@ class ChoresCog(commands.Cog):
         logger.info(f"Remove flatmate result: {success}, message: {message}")
 
     @chores.command(name="add_chore")
-    @app_commands.describe(name="Chore name to add", difficulty="Difficulty level (1-5)")
+    @app_commands.describe(name="Chore name to add")
     @app_commands.checks.has_permissions(administrator=True)
-    async def add_chore(self, interaction: discord.Interaction, name: str, difficulty: int = 1):
-        """Add a new chore with optional difficulty rating."""
+    async def add_chore(self, interaction: discord.Interaction, name: str):
+        """Add a new chore."""
         logger.info(
-            f"Add chore command invoked by {interaction.user.name} (ID: {interaction.user.id}), name: {name}, difficulty: {difficulty}")
+            f"Add chore command invoked by {interaction.user.name} (ID: {interaction.user.id}), name: {name}")
 
-        # Validate difficulty level
-        if difficulty < 1 or difficulty > 5:
-            logger.warning(f"Invalid difficulty level: {difficulty}")
-            await interaction.response.send_message("Difficulty must be between 1 and 5.")
-            return
-
-        success, message = self.config_manager.add_chore(name, difficulty)
+        success, message = self.config_manager.add_chore(name)
         await interaction.response.send_message(message)
         logger.info(f"Add chore result: {success}, message: {message}")
 
@@ -683,11 +672,6 @@ class ChoresCog(commands.Cog):
 
         # Add each chore and assigned flatmate to the embed
         for chore, flatmate_name in assignments.items():
-            # Get chore difficulty
-            difficulty = self.config_manager.get_chore_details(chore).get("difficulty", 1)
-            difficulty_stars = "⭐" * difficulty
-            logger.debug(f"Chore '{chore}' difficulty: {difficulty} ({difficulty_stars})")
-
             # Get the flatmate's Discord ID to mention them
             flatmate = self.config_manager.get_flatmate_by_name(flatmate_name)
             if flatmate:
@@ -698,7 +682,7 @@ class ChoresCog(commands.Cog):
                 value = BotStrings.EMBED_TASK_ASSIGNED.format(mention=flatmate_name)
                 logger.warning(f"Flatmate not found for assignment: {chore} -> {flatmate_name}")
 
-            embed.add_field(name=f"**{chore}** {difficulty_stars}", value=value, inline=False)
+            embed.add_field(name=f"**{chore}**", value=value, inline=False)
 
         # Add instructions for reactions
         emojis = self.config_manager.get_emoji()

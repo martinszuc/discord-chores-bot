@@ -218,32 +218,8 @@ class ScheduleManager:
         logger.info(f"Cleared exclusions: {old_excluded}")
         return True
 
-    def calculate_priority_score(self, flatmate):
-        """Calculate a priority score for a flatmate based on their stats.
-        Lower score means higher priority to be assigned a chore.
-        """
-        logger.debug(f"Calculating priority score for flatmate: {flatmate['name']}")
-        stats = self.config_manager.get_flatmate_stats(flatmate["name"])
-        if not stats:
-            logger.debug(f"No stats found for {flatmate['name']}, returning default score 0")
-            return 0
-
-        # Calculate score - give higher priority to those who complete chores
-        # and lower priority to those who skip or get reassigned
-        completed = stats.get("completed", 0)
-        skipped = stats.get("skipped", 0)
-        reassigned = stats.get("reassigned", 0)
-
-        score = skipped * 2 + reassigned - completed * 0.5
-
-        logger.debug(
-            f"Priority score for {flatmate['name']}: {score} (completed: {completed}, skipped: {skipped}, reassigned: {reassigned})")
-        return score
-
     def generate_new_schedule(self):
-        """Generate a new chore schedule using the priority system and difficulty balancing,
-        while ensuring rotation between weeks.
-        """
+        """Generate a new chore schedule using a priority-based system that considers completion statistics."""
         logger.info("Generating new chore schedule")
 
         # Store current assignments as previous before generating new ones
@@ -289,108 +265,95 @@ class ScheduleManager:
 
         self.config_manager.save_config()
 
-        # Sort chores by difficulty (highest first)
-        sorted_chores = sorted(
-            chores,
-            key=lambda c: self.config_manager.get_chore_details(c).get("difficulty", 1),
-            reverse=True
-        )
+        # Calculate priority scores for each flatmate based on statistics
+        flatmate_priorities = []
+        for flatmate in flatmates:
+            name = flatmate["name"]
+            stats = self.config_manager.get_flatmate_stats(name)
 
-        logger.debug(f"Chores sorted by difficulty (highest first): {sorted_chores}")
+            # Higher priority for those who have completed fewer chores
+            completed = stats.get("completed", 0)
+            skipped = stats.get("skipped", 0)
+            reassigned = stats.get("reassigned", 0)
 
-        # Calculate priority scores for flatmates
-        logger.debug("Calculating priority scores for all flatmates")
-        flatmates_with_scores = [
-            (f, self.calculate_priority_score(f)) for f in flatmates
-        ]
+            # Priority formula: prioritize those who have completed fewer chores
+            # and those who have skipped more (they should take responsibility)
+            priority_score = 100 - (completed * 10) + (skipped * 5)
 
-        for f, score in flatmates_with_scores:
-            logger.debug(f"Priority score for {f['name']}: {score}")
+            # Lower priority if they had a chore last week (to avoid repetition)
+            if name in previous_flatmate_chores:
+                priority_score -= 15
 
-        # Sort flatmates by priority score (lowest first = highest priority)
-        sorted_flatmates = [f for f, _ in sorted(
-            flatmates_with_scores,
-            key=lambda item: item[1]
-        )]
+            logger.debug(
+                f"Flatmate {name} priority score: {priority_score} (completed: {completed}, skipped: {skipped})")
+            flatmate_priorities.append((flatmate, priority_score))
 
-        logger.debug(f"Flatmates sorted by priority (highest first): {[f['name'] for f in sorted_flatmates]}")
+        # Sort flatmates by priority (highest score first)
+        sorted_flatmates = [f for f, _ in sorted(flatmate_priorities, key=lambda x: x[1], reverse=True)]
+        logger.debug(f"Flatmates sorted by priority: {[f['name'] for f in sorted_flatmates]}")
 
-        # Assign chores, starting with the most difficult chores
+        # New assignments dict
         new_assignments = {}
-        flatmate_difficulty_sum = {f["name"]: 0 for f in flatmates}
-        assigned_flatmates = set()  # Track which flatmates have been assigned
+        available_flatmates = list(sorted_flatmates)  # Start with all flatmates
 
-        logger.info("Beginning chore assignment process")
+        # First pass: Try to assign chores avoiding last week's assignments
+        for chore in chores:
+            logger.debug(f"Assigning chore: {chore}")
 
-        # First pass: Try to assign each chore to someone who didn't have it last week
-        for chore in sorted_chores:
-            # Get difficulty of this chore
-            chore_difficulty = self.config_manager.get_chore_details(chore).get("difficulty", 1)
-            logger.debug(f"Assigning chore: {chore} (difficulty: {chore_difficulty})")
+            # Skip if no flatmates available
+            if not available_flatmates:
+                break
 
-            # Find previous assignee of this chore
+            # Get flatmate who had this chore last week
             previous_assignee = previous_assignments.get(chore)
             logger.debug(f"Previous assignee for '{chore}': {previous_assignee}")
 
-            # Find eligible flatmates (those who don't have an assignment yet and didn't have this chore last week)
-            eligible_flatmates = [
-                f for f in sorted_flatmates
-                if f["name"] not in assigned_flatmates and f["name"] != previous_assignee
-            ]
+            # Try to assign to someone who didn't have this chore last week
+            assigned = False
+            for flatmate in available_flatmates[:]:  # Copy to avoid modification during iteration
+                if flatmate["name"] != previous_assignee:
+                    new_assignments[chore] = flatmate["name"]
+                    available_flatmates.remove(flatmate)
+                    logger.info(f"Assigned '{chore}' to {flatmate['name']} (by priority)")
+                    assigned = True
+                    break
 
-            if not eligible_flatmates:
-                # If no eligible flatmates, use anyone who hasn't been assigned yet
-                eligible_flatmates = [f for f in sorted_flatmates if f["name"] not in assigned_flatmates]
-                logger.debug(
-                    f"No eligible flatmates who didn't have this chore last week, falling back to {len(eligible_flatmates)} unassigned flatmates")
+            # If we couldn't avoid last week's assignee, just pick the highest priority available
+            if not assigned and available_flatmates:
+                flatmate = available_flatmates[0]
+                new_assignments[chore] = flatmate["name"]
+                available_flatmates.remove(flatmate)
+                logger.info(f"Assigned '{chore}' to {flatmate['name']} (only available option)")
 
-            if eligible_flatmates:
-                # Sort by current load
-                sorted_by_load = sorted(
-                    eligible_flatmates,
-                    key=lambda f: flatmate_difficulty_sum[f["name"]]
-                )
-
-                # Assign to flatmate with lowest load
-                assigned_flatmate = sorted_by_load[0]
-                new_assignments[chore] = assigned_flatmate["name"]
-                assigned_flatmates.add(assigned_flatmate["name"])
-
-                # Update their total difficulty
-                old_load = flatmate_difficulty_sum[assigned_flatmate["name"]]
-                flatmate_difficulty_sum[assigned_flatmate["name"]] += chore_difficulty
-                new_load = flatmate_difficulty_sum[assigned_flatmate["name"]]
-
-                logger.info(f"Assigned '{chore}' to {assigned_flatmate['name']} (previous: {previous_assignee})")
-                logger.debug(f"Updated load for {assigned_flatmate['name']}: {old_load} -> {new_load}")
-            else:
-                logger.warning(f"No eligible flatmates for chore: {chore}")
-
-        # Second pass: Assign any remaining chores (should only happen if more chores than flatmates)
-        remaining_chores = [c for c in sorted_chores if c not in new_assignments]
+        # Handle any remaining chores (if more chores than flatmates)
+        remaining_chores = [c for c in chores if c not in new_assignments]
         if remaining_chores:
-            logger.debug(f"Assigning {len(remaining_chores)} remaining chores: {remaining_chores}")
+            logger.debug(f"Processing {len(remaining_chores)} remaining chores")
+
+            # Reset available flatmates list, excluding those who already have multiple chores
+            already_assigned = {}
+            for chore, flatmate_name in new_assignments.items():
+                already_assigned[flatmate_name] = already_assigned.get(flatmate_name, 0) + 1
+
+            # Prioritize flatmates with fewest assignments
+            available_for_extra = [(f, already_assigned.get(f["name"], 0)) for f in sorted_flatmates]
+            available_for_extra.sort(key=lambda x: x[1])  # Sort by number of current assignments
 
             for chore in remaining_chores:
-                chore_difficulty = self.config_manager.get_chore_details(chore).get("difficulty", 1)
+                if not available_for_extra:
+                    logger.warning(f"No flatmates available for remaining chore: {chore}")
+                    break
 
-                # Sort all flatmates by current load
-                sorted_by_load = sorted(
-                    sorted_flatmates,
-                    key=lambda f: flatmate_difficulty_sum[f["name"]]
-                )
+                flatmate, _ = available_for_extra[0]
+                new_assignments[chore] = flatmate["name"]
+                logger.info(f"Assigned remaining chore '{chore}' to {flatmate['name']}")
 
-                # Assign to flatmate with lowest load
-                assigned_flatmate = sorted_by_load[0]
-                new_assignments[chore] = assigned_flatmate["name"]
-
-                # Update their total difficulty
-                old_load = flatmate_difficulty_sum[assigned_flatmate["name"]]
-                flatmate_difficulty_sum[assigned_flatmate["name"]] += chore_difficulty
-                new_load = flatmate_difficulty_sum[assigned_flatmate["name"]]
-
-                logger.info(f"Assigned remaining chore '{chore}' to {assigned_flatmate['name']}")
-                logger.debug(f"Updated load for {assigned_flatmate['name']}: {old_load} -> {new_load}")
+                # Update assignment count and re-sort
+                for i, (f, count) in enumerate(available_for_extra):
+                    if f["name"] == flatmate["name"]:
+                        available_for_extra[i] = (f, count + 1)
+                        break
+                available_for_extra.sort(key=lambda x: x[1])
 
         # Save new assignments
         logger.info(f"Final assignments: {new_assignments}")
