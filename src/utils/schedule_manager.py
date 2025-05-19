@@ -451,23 +451,13 @@ class ScheduleManager:
 
         return next_flatmate["name"]
 
-    def mark_chore_completed(self, chore, flatmate_name, helper=None):
-        """
-        Mark a chore as completed by a flatmate.
-
-        Args:
-            chore (str): The chore that was completed
-            flatmate_name (str): Name of the flatmate assigned to the chore
-            helper (str, optional): Name of the flatmate who helped complete the chore
-
-        Returns:
-            tuple: (success, message)
-        """
+    async def mark_chore_completed(self, chore, flatmate_name, helper=None):
+        """Mark a chore as completed by a flatmate."""
         logger.info(f"Marking chore '{chore}' as completed by {flatmate_name}" +
                     (f" with help from {helper}" if helper else ""))
 
         # Check if the chore exists and is assigned to the flatmate
-        current_assignment = self.get_assignment_for_chore(chore)
+        current_assignment = self.schedule_manager.get_assignment_for_chore(chore)
         if not current_assignment:
             logger.warning(f"No assignment found for chore: {chore}")
             return False, f"No assignment found for chore: {chore}"
@@ -477,13 +467,13 @@ class ScheduleManager:
             return False, f"Chore is assigned to {current_assignment}, not {flatmate_name}"
 
         # Remove from pending chores
-        if "pending_chores" not in self.schedule_data:
+        if "pending_chores" not in self.schedule_manager.schedule_data:
             logger.debug("Initializing pending_chores list")
-            self.schedule_data["pending_chores"] = []
+            self.schedule_manager.schedule_data["pending_chores"] = []
 
-        if chore in self.schedule_data["pending_chores"]:
+        if chore in self.schedule_manager.schedule_data["pending_chores"]:
             logger.debug(f"Removing '{chore}' from pending chores")
-            self.schedule_data["pending_chores"].remove(chore)
+            self.schedule_manager.schedule_data["pending_chores"].remove(chore)
         else:
             logger.debug(f"Chore '{chore}' not in pending list, possibly already completed")
 
@@ -494,21 +484,30 @@ class ScheduleManager:
             self.config_manager.update_flatmate_stats(helper, "completed")
 
             # Mark helper as having voted
-            self.add_voted_flatmate(helper)
+            self.schedule_manager.add_voted_flatmate(helper)
 
             # We don't mark the original flatmate as having completed or voted
             # This way they don't get a completion stat but also aren't penalized
         else:
             # Mark flatmate as having voted
-            self.add_voted_flatmate(flatmate_name)
+            self.schedule_manager.add_voted_flatmate(flatmate_name)
 
             # Update statistics for the assigned flatmate
             logger.info(f"Updating completion statistics for {flatmate_name}")
             self.config_manager.update_flatmate_stats(flatmate_name, "completed")
 
-        self._save_schedule_data()
+        self.schedule_manager._save_schedule_data()
         logger.info(f"Chore '{chore}' marked as completed" +
                     (f" by {helper} for {flatmate_name}" if helper else f" by {flatmate_name}"))
+
+        # Play celebration music
+        music_cog = self.bot.get_cog("MusicCog")
+        if music_cog:
+            logger.info("Triggering music celebration")
+            guild = self.bot.get_guild(self.bot.guilds[0].id)  # Get the first guild
+            await music_cog.play_celebration(guild)
+        else:
+            logger.warning("MusicCog not found, cannot play celebration music")
 
         return True, f"Chore '{chore}' marked as completed" + (
             f" by {helper} for {flatmate_name}" if helper else f" by {flatmate_name}")

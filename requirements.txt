@@ -3,3 +3,4 @@ python-dotenv==1.0.0
 pytz==2023.3
 aiohttp==3.10.11
 emoji==2.8.0
+PyNaCl==1.5.0

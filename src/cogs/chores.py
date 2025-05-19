@@ -788,6 +788,14 @@ class ChoresCog(commands.Cog):
                     )
                     await channel.send(completion_msg)
                     logger.info(f"Chore '{chore}' marked as completed by {flatmate['name']}")
+
+                    # Play celebration music
+                    music_cog = self.bot.get_cog("MusicCog")
+                    if music_cog:
+                        logger.info("Triggering music celebration")
+                        await music_cog.play_celebration(channel.guild)
+                    else:
+                        logger.warning("MusicCog not found, cannot play celebration music")
             else:
                 # Another flatmate is completing the chore for the assigned flatmate
                 logger.info(f"Flatmate {flatmate['name']} is completing chore '{chore}' for {assigned_flatmate_name}")
@@ -806,7 +814,17 @@ class ChoresCog(commands.Cog):
                     await channel.send(helper_msg)
                     logger.info(f"Chore '{chore}' completed by {flatmate['name']} for {assigned_flatmate_name}")
 
+                    # Play celebration music
+                    music_cog = self.bot.get_cog("MusicCog")
+                    if music_cog:
+                        logger.info("Triggering music celebration")
+                        await music_cog.play_celebration(channel.guild)
+                    else:
+                        logger.warning("MusicCog not found, cannot play celebration music")
+
         elif emoji_name == emojis["unavailable"]:
+            # Rest of your unavailable reaction handling...
+            # (code for handling unavailable reaction remains unchanged)
             if not is_assigned_flatmate:
                 # Only the assigned flatmate can mark as unavailable
                 logger.warning(f"User {user.name} tried to mark someone else's chore as unavailable")

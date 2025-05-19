@@ -103,6 +103,14 @@ class ChoresBot(commands.Bot):
         except Exception as e:
             logger.error(f"Failed to load help cog: {e}", exc_info=True)
 
+        # Load the music cog
+        try:
+            await self.load_extension("src.cogs.music")
+            loaded_cogs.append("music")
+            logger.info("Loaded music cog")
+        except Exception as e:
+            logger.error(f"Failed to load music cog: {e}", exc_info=True)
+
         logger.info(f"Cog loading completed. Loaded cogs: {', '.join(loaded_cogs)}")
 
         # Schedule the first chore post
