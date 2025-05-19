@@ -121,18 +121,6 @@ class ChoresCog(commands.Cog):
         logger.debug(f"Posting new schedule in channel: {interaction.channel.name} (ID: {interaction.channel.id})")
 
         await self.post_schedule(interaction.channel)
-
-        # Get new assignments to show what changed
-        new_assignments = self.schedule_manager.get_current_assignments()
-        new_assignments_str = ", ".join(
-            [f"**{chore}**: {name}" for chore, name in new_assignments.items()]) if new_assignments else "None"
-
-        # Create a summary message
-        summary = f"**New schedule posted successfully!**\n\n"
-        summary += f"Previous assignments: {old_assignments_str}\n"
-        summary += f"New assignments: {new_assignments_str}"
-
-        await interaction.followup.send(summary)
         logger.info("New schedule posted successfully with summary")
 
     @chores.command(name="reset")
