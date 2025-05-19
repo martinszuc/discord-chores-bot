@@ -44,8 +44,9 @@ class ChoresCog(commands.Cog):
     chores = app_commands.Group(name="chores", description="Commands for managing chores")
 
     @chores.command(name="show")
+    @app_commands.describe(detailed="Show detailed view with individual assignment messages (default: False)")
     async def show_schedule(self, interaction: discord.Interaction, detailed: bool = False):
-        """Show the current chore schedule. Use detailed=True for a more detailed view."""
+        """Show the current chore schedule. Use detailed=True for a more detailed view with reaction buttons."""
         logger.info(
             f"Show schedule command invoked by {interaction.user.name} (ID: {interaction.user.id}), detailed: {detailed}")
 
@@ -71,13 +72,11 @@ class ChoresCog(commands.Cog):
             logger.debug(f"Using channel for detailed messages: {channel.name} (ID: {channel.id})")
 
             # Post instructions
-            if not self.instructions_sent:
-                logger.debug("Posting instructions for detailed view")
-                await channel.send(BotStrings.REACTION_INSTRUCTIONS)
-                self.instructions_sent = True
+            await channel.send(BotStrings.REACTION_INSTRUCTIONS)
 
             # Send individual messages for each assignment with reaction emojis
             emojis = self.config_manager.get_emoji()
+            msg_count = 0
 
             for chore, flatmate_name in assignments.items():
                 flatmate = self.config_manager.get_flatmate_by_name(flatmate_name)
@@ -99,14 +98,13 @@ class ChoresCog(commands.Cog):
                 message = await channel.send(task_message)
                 await message.add_reaction(emojis["completed"])
                 await message.add_reaction(emojis["unavailable"])
+                msg_count += 1
 
                 # Cache the message ID for reaction handling
                 self.message_cache[message.id] = (chore, flatmate_name)
 
-            logger.info(f"Posted detailed schedule with {len(assignments)} individual messages")
-
-    # Modification for src/cogs/chores.py
-    # Update the next_schedule method (around line 87)
+            logger.info(f"Posted detailed schedule with {msg_count} individual messages")
+            await interaction.followup.send(f"✅ Posted {msg_count} assignment messages with reaction buttons")
 
     @chores.command(name="next")
     @app_commands.checks.has_permissions(manage_messages=True)

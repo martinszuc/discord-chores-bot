@@ -197,6 +197,14 @@ class ChoresBot(commands.Bot):
             logger.info(f"Next chore post scheduled for {next_post.strftime('%Y-%m-%d %H:%M:%S %Z')}")
             logger.info(f"Waiting {seconds_until:.2f} seconds")
 
+            if seconds_until < 0:
+                logger.info("Negative wait time detected, skipping immediate posting and scheduling for next week")
+                # Add 1 week to get to the next occurrence
+                next_post = next_post + datetime.timedelta(days=7)
+                seconds_until = (next_post - now).total_seconds()
+                logger.info(
+                    f"Rescheduled for {next_post.strftime('%Y-%m-%d %H:%M:%S %Z')}, waiting {seconds_until:.2f} seconds")
+
             # Schedule the first post
             await asyncio.sleep(seconds_until)
             logger.info("Time to post chore schedule, calling post_schedule")
