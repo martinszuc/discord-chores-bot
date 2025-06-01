@@ -1,9 +1,9 @@
+import datetime
+import logging
+
 import discord
 from discord import app_commands
 from discord.ext import commands
-import datetime
-import logging
-from src.utils.strings import BotStrings
 
 logger = logging.getLogger('chores-bot')
 
