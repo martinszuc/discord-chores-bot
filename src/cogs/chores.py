@@ -146,11 +146,11 @@ class ChoresCog(commands.Cog):
         logger.info(f"Show config command invoked by {interaction.user.name} (ID: {interaction.user.id})")
 
         flatmates = self.config_manager.get_flatmates()
-        chores = self.config_manager.get_chores()
+        chores_data = self.config_manager.get_chores_data()
         schedule = self.config_manager.get_posting_schedule()
         reminder_settings = self.config_manager.get_reminder_settings()
 
-        logger.debug(f"Found {len(flatmates)} flatmates, {len(chores)} chores")
+        logger.debug(f"Found {len(flatmates)} flatmates, {len(chores_data)} chores")
         logger.debug(f"Posting schedule: {schedule}")
         logger.debug(f"Reminder settings: {reminder_settings}")
 
@@ -167,8 +167,17 @@ class ChoresCog(commands.Cog):
         ])
         embed.add_field(name="Flatmates", value=flatmates_str or "None", inline=False)
 
-        # Add chores - no difficulty displayed
-        chores_str = "\n".join([f"• {chore}" for chore in chores])
+        # Add chores with frequency - Fixed to avoid nested f-string with same quote type
+        chores_list = []
+        for chore in chores_data:
+            freq = chore.get('frequency', 1)
+            if freq == 1:
+                freq_text = "weekly"
+            else:
+                freq_text = f"every {freq} weeks"
+            chores_list.append(f"• {chore['name']} ({freq}x/{freq_text})")
+
+        chores_str = "\n".join(chores_list)
         embed.add_field(name="Chores", value=chores_str or "None", inline=False)
 
         # Add schedule
@@ -229,18 +238,6 @@ class ChoresCog(commands.Cog):
         success, message = self.config_manager.remove_flatmate(name)
         await interaction.response.send_message(message)
         logger.info(f"Remove flatmate result: {success}, message: {message}")
-
-    @chores.command(name="add_chore")
-    @app_commands.describe(name="Chore name to add")
-    @app_commands.checks.has_permissions(administrator=True)
-    async def add_chore(self, interaction: discord.Interaction, name: str):
-        """Add a new chore."""
-        logger.info(
-            f"Add chore command invoked by {interaction.user.name} (ID: {interaction.user.id}), name: {name}")
-
-        success, message = self.config_manager.add_chore(name)
-        await interaction.response.send_message(message)
-        logger.info(f"Add chore result: {success}, message: {message}")
 
     @chores.command(name="remove_chore")
     @app_commands.describe(name="Chore name to remove")
@@ -595,10 +592,9 @@ class ChoresCog(commands.Cog):
             logger.warning(f"Failed to set frequency: {message}")
             await interaction.response.send_message(message)
 
-    # Update the add_chore command to support frequency
     @chores.command(name="add_chore")
     @app_commands.describe(name="Chore name to add",
-                           frequency="How often this chore appears (1=weekly, 2=bi-weekly, etc.)")
+                          frequency="How often this chore appears (1=weekly, 2=bi-weekly, etc.)")
     @app_commands.checks.has_permissions(administrator=True)
     async def add_chore(self, interaction: discord.Interaction, name: str, frequency: int = 1):
         """Add a new chore with frequency."""
@@ -619,74 +615,6 @@ class ChoresCog(commands.Cog):
         else:
             logger.warning(f"Failed to add chore: {message}")
             await interaction.response.send_message(message)
-
-    @chores.command(name="config")
-    async def show_config(self, interaction: discord.Interaction):
-        """Show the current configuration."""
-        logger.info(f"Show config command invoked by {interaction.user.name} (ID: {interaction.user.id})")
-
-        flatmates = self.config_manager.get_flatmates()
-        chores_data = self.config_manager.get_chores_data()
-        schedule = self.config_manager.get_posting_schedule()
-        reminder_settings = self.config_manager.get_reminder_settings()
-
-        logger.debug(f"Found {len(flatmates)} flatmates, {len(chores_data)} chores")
-        logger.debug(f"Posting schedule: {schedule}")
-        logger.debug(f"Reminder settings: {reminder_settings}")
-
-        embed = discord.Embed(
-            title="Chores Bot Configuration",
-            color=discord.Color.blue(),
-            timestamp=datetime.datetime.now()
-        )
-
-        # Add flatmates
-        flatmates_str = "\n".join([
-            f"• {f['name']} (<@{f['discord_id']}>) {'🏖️ On Vacation' if f.get('on_vacation', False) else ''}"
-            for f in flatmates
-        ])
-        embed.add_field(name="Flatmates", value=flatmates_str or "None", inline=False)
-
-        # Add chores with frequency - Fixed to avoid nested f-string with same quote type
-        chores_list = []
-        for chore in chores_data:
-            freq = chore.get('frequency', 1)
-            if freq == 1:
-                freq_text = "weekly"
-            else:
-                freq_text = f"every {freq} weeks"
-            chores_list.append(f"• {chore['name']} ({freq}x/{freq_text})")
-
-        chores_str = "\n".join(chores_list)
-        embed.add_field(name="Chores", value=chores_str or "None", inline=False)
-
-        # Add schedule
-        embed.add_field(
-            name="Posting Schedule",
-            value=f"Day: {schedule['day']}\nTime: {schedule['time']}\nTimezone: {schedule['timezone']}",
-            inline=False
-        )
-
-        # Add reminder settings
-        reminder_status = "Enabled" if reminder_settings.get("enabled", True) else "Disabled"
-        embed.add_field(
-            name="Reminder Settings",
-            value=f"Status: {reminder_status}\nDay: {reminder_settings.get('day', 'Friday')}\nTime: {reminder_settings.get('time', '11:00')}",
-            inline=False
-        )
-
-        # Add next week exclusions
-        excluded_flatmates = self.schedule_manager.get_excluded_for_next_rotation()
-        if excluded_flatmates:
-            exclusions_str = "\n".join([f"• {name}" for name in excluded_flatmates])
-            embed.add_field(
-                name="Excluded from Next Rotation",
-                value=exclusions_str,
-                inline=False
-            )
-
-        await interaction.response.send_message(embed=embed)
-        logger.info("Config displayed successfully")
 
     async def post_schedule(self, channel=None):
         """Post the weekly chore schedule with individual messages for each flatmate."""
