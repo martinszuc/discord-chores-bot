@@ -219,13 +219,6 @@ class ConfigManager:
         logger.debug(f"Stats for {name}: {flatmate['stats']}")
         return flatmate["stats"]
 
-    def get_chores(self):
-        """Get the list of chores."""
-        logger.debug("Getting list of chores")
-        chores = self.config.get("chores", [])
-        logger.debug(f"Found {len(chores)} chores")
-        return chores
-
     def add_chore(self, chore_name):
         """Add a new chore."""
         logger.info(f"Adding new chore: {chore_name}")
@@ -241,22 +234,6 @@ class ConfigManager:
         self.save_config()
         logger.info(f"Chore added successfully: {chore_name}")
         return True, "Chore added successfully"
-
-    def remove_chore(self, chore_name):
-        """Remove a chore."""
-        logger.info(f"Removing chore: {chore_name}")
-        chores = self.get_chores()
-        if chore_name not in chores:
-            logger.warning(f"Attempted to remove non-existent chore: {chore_name}")
-            return False, "Chore not found"
-
-        # Remove from chores list
-        chores.remove(chore_name)
-        self.config["chores"] = chores
-
-        self.save_config()
-        logger.info(f"Chore removed successfully: {chore_name}")
-        return True, "Chore removed successfully"
 
     def get_posting_schedule(self):
         """Get the posting day and time."""
@@ -333,3 +310,127 @@ class ConfigManager:
         data_file = self.config.get("schedule_data_file", "data/schedule_data.json")
         logger.debug(f"Schedule data file: {data_file}")
         return data_file
+
+    def get_chores(self):
+        """Get the list of chore names."""
+        logger.debug("Getting list of chores")
+        chores_data = self.config.get("chores", [])
+
+        # Handle both old and new format
+        if chores_data and isinstance(chores_data[0], dict):
+            # New format
+            chore_names = [chore["name"] for chore in chores_data]
+            logger.debug(f"Found {len(chore_names)} chores (new format)")
+            return chore_names
+        else:
+            # Old format - strings
+            logger.debug(f"Found {len(chores_data)} chores (old format)")
+            return chores_data
+
+    def get_chores_data(self):
+        """Get the full chore data including frequency."""
+        logger.debug("Getting full chore data")
+        chores_data = self.config.get("chores", [])
+
+        # Handle old format
+        if chores_data and not isinstance(chores_data[0], dict):
+            # Convert old format to new format
+            logger.debug("Converting chores from old to new format")
+            chores_data = [{"name": chore, "frequency": 1} for chore in chores_data]
+            self.config["chores"] = chores_data
+            self.save_config()
+
+        logger.debug(f"Found {len(chores_data)} chores with frequency data")
+        return chores_data
+
+    def get_chore_by_name(self, name):
+        """Get a chore by name."""
+        logger.debug(f"Looking for chore with name: {name}")
+        chores_data = self.get_chores_data()
+
+        for chore in chores_data:
+            if chore["name"].lower() == name.lower():
+                logger.debug(f"Found chore: {chore}")
+                return chore
+
+        logger.debug(f"Chore not found with name: {name}")
+        return None
+
+    def get_chore_frequency(self, name):
+        """Get the frequency of a chore."""
+        chore = self.get_chore_by_name(name)
+        if chore:
+            frequency = chore.get("frequency", 1)
+            logger.debug(f"Frequency for chore '{name}': {frequency}")
+            return frequency
+
+        logger.debug(f"Frequency not found for chore: {name}")
+        return 1  # Default to weekly
+
+    def set_chore_frequency(self, name, frequency):
+        """Set the frequency of a chore."""
+        logger.info(f"Setting frequency for chore '{name}' to {frequency}")
+
+        chores_data = self.get_chores_data()
+
+        # Find the chore
+        for chore in chores_data:
+            if chore["name"].lower() == name.lower():
+                chore["frequency"] = frequency
+                self.config["chores"] = chores_data
+                self.save_config()
+                logger.info(f"Frequency for chore '{name}' set to {frequency}")
+                return True, f"Frequency for '{name}' set to {frequency}"
+
+        logger.warning(f"Attempted to set frequency for non-existent chore: {name}")
+        return False, "Chore not found"
+
+    def add_chore(self, chore_name, frequency=1):
+        """Add a new chore with frequency."""
+        logger.info(f"Adding new chore: {chore_name} with frequency: {frequency}")
+
+        # Get existing chores
+        chores_data = self.get_chores_data()
+
+        # Check if chore already exists
+        for chore in chores_data:
+            if chore["name"].lower() == chore_name.lower():
+                logger.warning(f"Attempted to add duplicate chore: {chore_name}")
+                return False, "Chore already exists"
+
+        # Add the new chore
+        new_chore = {
+            "name": chore_name,
+            "frequency": frequency
+        }
+
+        chores_data.append(new_chore)
+        self.config["chores"] = chores_data
+
+        self.save_config()
+        logger.info(f"Chore added successfully: {chore_name} (frequency: {frequency})")
+        return True, "Chore added successfully"
+
+    def remove_chore(self, chore_name):
+        """Remove a chore."""
+        logger.info(f"Removing chore: {chore_name}")
+
+        chores_data = self.get_chores_data()
+
+        # Find the chore
+        for i, chore in enumerate(chores_data):
+            if isinstance(chore, dict) and chore["name"].lower() == chore_name.lower():
+                del chores_data[i]
+                self.config["chores"] = chores_data
+                self.save_config()
+                logger.info(f"Chore removed successfully: {chore_name}")
+                return True, "Chore removed successfully"
+            elif isinstance(chore, str) and chore.lower() == chore_name.lower():
+                del chores_data[i]
+                self.config["chores"] = chores_data
+                self.save_config()
+                logger.info(f"Chore removed successfully: {chore_name}")
+                return True, "Chore removed successfully"
+
+        logger.warning(f"Attempted to remove non-existent chore: {chore_name}")
+        return False, "Chore not found"

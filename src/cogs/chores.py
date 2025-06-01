@@ -570,6 +570,122 @@ class ChoresCog(commands.Cog):
             f"Stored planning cache for message ID {message.id} with {len(self.next_week_planning_cache['flatmates'])} flatmates")
         logger.info("Next week planning setup completed")
 
+    @chores.command(name="set_frequency")
+    @app_commands.describe(chore="Chore name", frequency="Frequency (1=weekly, 2=bi-weekly, etc.)")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def set_frequency(self, interaction: discord.Interaction, chore: str, frequency: int):
+        """Set how often a chore appears in the rotation."""
+        logger.info(
+            f"Set frequency command invoked by {interaction.user.name} (ID: {interaction.user.id}), chore: {chore}, frequency: {frequency}")
+
+        # Validate frequency
+        if frequency < 1:
+            logger.warning(f"Invalid frequency: {frequency}")
+            await interaction.response.send_message("Frequency must be at least 1.")
+            return
+
+        success, message = self.config_manager.set_chore_frequency(chore, frequency)
+        if success:
+            freq_text = "weekly" if frequency == 1 else f"every {frequency} weeks"
+            logger.info(f"Frequency for chore '{chore}' set to {frequency} ({freq_text})")
+            await interaction.response.send_message(f"Frequency for '{chore}' set to {frequency} ({freq_text}).")
+        else:
+            logger.warning(f"Failed to set frequency: {message}")
+            await interaction.response.send_message(message)
+
+    # Update the add_chore command to support frequency
+    @chores.command(name="add_chore")
+    @app_commands.describe(name="Chore name to add",
+                           frequency="How often this chore appears (1=weekly, 2=bi-weekly, etc.)")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def add_chore(self, interaction: discord.Interaction, name: str, frequency: int = 1):
+        """Add a new chore with frequency."""
+        logger.info(
+            f"Add chore command invoked by {interaction.user.name} (ID: {interaction.user.id}), name: {name}, frequency: {frequency}")
+
+        # Validate frequency
+        if frequency < 1:
+            logger.warning(f"Invalid frequency: {frequency}")
+            await interaction.response.send_message("Frequency must be at least 1.")
+            return
+
+        success, message = self.config_manager.add_chore(name, frequency)
+        if success:
+            freq_text = "weekly" if frequency == 1 else f"every {frequency} weeks"
+            logger.info(f"Added chore '{name}' with frequency {frequency} ({freq_text})")
+            await interaction.response.send_message(f"Chore '{name}' added successfully. It will appear {freq_text}.")
+        else:
+            logger.warning(f"Failed to add chore: {message}")
+            await interaction.response.send_message(message)
+
+    @chores.command(name="config")
+    async def show_config(self, interaction: discord.Interaction):
+        """Show the current configuration."""
+        logger.info(f"Show config command invoked by {interaction.user.name} (ID: {interaction.user.id})")
+
+        flatmates = self.config_manager.get_flatmates()
+        chores_data = self.config_manager.get_chores_data()
+        schedule = self.config_manager.get_posting_schedule()
+        reminder_settings = self.config_manager.get_reminder_settings()
+
+        logger.debug(f"Found {len(flatmates)} flatmates, {len(chores_data)} chores")
+        logger.debug(f"Posting schedule: {schedule}")
+        logger.debug(f"Reminder settings: {reminder_settings}")
+
+        embed = discord.Embed(
+            title="Chores Bot Configuration",
+            color=discord.Color.blue(),
+            timestamp=datetime.datetime.now()
+        )
+
+        # Add flatmates
+        flatmates_str = "\n".join([
+            f"• {f['name']} (<@{f['discord_id']}>) {'🏖️ On Vacation' if f.get('on_vacation', False) else ''}"
+            for f in flatmates
+        ])
+        embed.add_field(name="Flatmates", value=flatmates_str or "None", inline=False)
+
+        # Add chores with frequency - Fixed to avoid nested f-string with same quote type
+        chores_list = []
+        for chore in chores_data:
+            freq = chore.get('frequency', 1)
+            if freq == 1:
+                freq_text = "weekly"
+            else:
+                freq_text = f"every {freq} weeks"
+            chores_list.append(f"• {chore['name']} ({freq}x/{freq_text})")
+
+        chores_str = "\n".join(chores_list)
+        embed.add_field(name="Chores", value=chores_str or "None", inline=False)
+
+        # Add schedule
+        embed.add_field(
+            name="Posting Schedule",
+            value=f"Day: {schedule['day']}\nTime: {schedule['time']}\nTimezone: {schedule['timezone']}",
+            inline=False
+        )
+
+        # Add reminder settings
+        reminder_status = "Enabled" if reminder_settings.get("enabled", True) else "Disabled"
+        embed.add_field(
+            name="Reminder Settings",
+            value=f"Status: {reminder_status}\nDay: {reminder_settings.get('day', 'Friday')}\nTime: {reminder_settings.get('time', '11:00')}",
+            inline=False
+        )
+
+        # Add next week exclusions
+        excluded_flatmates = self.schedule_manager.get_excluded_for_next_rotation()
+        if excluded_flatmates:
+            exclusions_str = "\n".join([f"• {name}" for name in excluded_flatmates])
+            embed.add_field(
+                name="Excluded from Next Rotation",
+                value=exclusions_str,
+                inline=False
+            )
+
+        await interaction.response.send_message(embed=embed)
+        logger.info("Config displayed successfully")
+
     async def post_schedule(self, channel=None):
         """Post the weekly chore schedule with individual messages for each flatmate."""
         logger.info("Posting new chore schedule")
@@ -724,6 +840,11 @@ class ChoresCog(commands.Cog):
         for chore, flatmate_name in assignments.items():
             # Get the flatmate's Discord ID to mention them
             flatmate = self.config_manager.get_flatmate_by_name(flatmate_name)
+
+            # Get chore frequency
+            frequency = self.config_manager.get_chore_frequency(chore)
+            freq_text = "" if frequency == 1 else f" (every {frequency} weeks)"
+
             if flatmate:
                 discord_id = flatmate["discord_id"]
                 value = BotStrings.EMBED_TASK_ASSIGNED.format(mention=f"<@{discord_id}>")
@@ -732,7 +853,7 @@ class ChoresCog(commands.Cog):
                 value = BotStrings.EMBED_TASK_ASSIGNED.format(mention=flatmate_name)
                 logger.warning(f"Flatmate not found for assignment: {chore} -> {flatmate_name}")
 
-            embed.add_field(name=f"**{chore}**", value=value, inline=False)
+            embed.add_field(name=f"**{chore}{freq_text}**", value=value, inline=False)
 
         # Add instructions for reactions
         emojis = self.config_manager.get_emoji()
@@ -825,6 +946,24 @@ class ChoresCog(commands.Cog):
 
         # Handle the reaction based on the emoji
         if emoji_name == emojis["completed"]:
+            # Check if the chore is still in pending chores
+            pending_chores = self.schedule_manager.get_pending_chores()
+            is_pending = chore in pending_chores
+
+            # Get who has already completed this chore
+            completed_by = self.schedule_manager.schedule_data.get("completed_by", {}).get(chore, [])
+            has_already_completed = flatmate["name"] in completed_by
+
+            # If the chore is not pending, and this person already completed it, ignore
+            if not is_pending and has_already_completed:
+                logger.debug(f"Flatmate {flatmate['name']} has already completed this chore, ignoring")
+                await message.remove_reaction(payload.emoji, user)
+                await channel.send(
+                    f"{user.mention} You've already completed this chore.",
+                    delete_after=10
+                )
+                return
+
             if is_assigned_flatmate:
                 # Mark chore as completed by assigned flatmate
                 logger.info(f"Marking chore '{chore}' as completed by {flatmate['name']}")
@@ -847,20 +986,27 @@ class ChoresCog(commands.Cog):
                     else:
                         logger.warning("MusicCog not found, cannot play celebration music")
             else:
-                # Another flatmate is completing the chore for the assigned flatmate
-                logger.info(f"Flatmate {flatmate['name']} is completing chore '{chore}' for {assigned_flatmate_name}")
+                # Another flatmate is completing the chore
+                logger.info(f"Flatmate {flatmate['name']} is completing chore '{chore}'")
 
-                # Mark chore as completed
-                success, _ = self.schedule_manager.mark_chore_completed(chore, assigned_flatmate_name,
-                                                                        helper=flatmate["name"])
+                # Mark chore as completed with helper
+                success, message_text = self.schedule_manager.mark_chore_completed(
+                    chore, assigned_flatmate_name, helper=flatmate["name"]
+                )
 
                 if success:
                     # Get the assigned flatmate's discord mention
                     assigned_flatmate = self.config_manager.get_flatmate_by_name(assigned_flatmate_name)
                     assigned_mention = f"<@{assigned_flatmate['discord_id']}>" if assigned_flatmate else assigned_flatmate_name
 
-                    # Send helper completion message
-                    helper_msg = f"✅ {user.mention} has completed the chore **{chore}** for {assigned_mention}! What a hero! 🦸"
+                    # Check if this is an additional completion
+                    if "additional" in message_text:
+                        # Additional completion message
+                        helper_msg = f"✅ {user.mention} has also completed the chore **{chore}**! Thank you so much for participating in keeping our flat clean! 🙌"
+                    else:
+                        # First completion by helper
+                        helper_msg = f"✅ {user.mention} has completed the chore **{chore}** that was assigned to {assigned_mention}! Thank you so much for participating in keeping our flat clean! 🦸"
+
                     await channel.send(helper_msg)
                     logger.info(f"Chore '{chore}' completed by {flatmate['name']} for {assigned_flatmate_name}")
 
@@ -871,12 +1017,9 @@ class ChoresCog(commands.Cog):
                         await music_cog.play_celebration(channel.guild)
                     else:
                         logger.warning("MusicCog not found, cannot play celebration music")
-
         elif emoji_name == emojis["unavailable"]:
-            # Rest of your unavailable reaction handling...
-            # (code for handling unavailable reaction remains unchanged)
+            # Only the assigned flatmate can mark as unavailable
             if not is_assigned_flatmate:
-                # Only the assigned flatmate can mark as unavailable
                 logger.warning(f"User {user.name} tried to mark someone else's chore as unavailable")
                 await message.remove_reaction(payload.emoji, user)
                 await channel.send(

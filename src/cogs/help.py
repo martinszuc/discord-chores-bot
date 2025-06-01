@@ -150,8 +150,14 @@ class HelpCog(commands.Cog):
         )
 
         embed.add_field(
-            name="/chores add_chore name:chore_name difficulty:1-5",
-            value="Add a new chore with optional difficulty level. (Admin only)",
+            name="/chores add_chore name:chore_name frequency:1",
+            value="Add a new chore with optional frequency. 1=weekly, 2=bi-weekly, etc.",
+            inline=False
+        )
+
+        embed.add_field(
+            name="/chores set_frequency chore:chore_name frequency:1",
+            value="Set how often a chore appears in the rotation. 1=weekly, 2=bi-weekly, etc.",
             inline=False
         )
 

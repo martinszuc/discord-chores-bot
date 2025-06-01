@@ -12,7 +12,7 @@ class BotStrings:
     TASK_COMPLETED_FOR_OTHER = "✅ {helper_mention} has completed the chore **{chore}** for {assignee_mention}! What a hero! 🦸"
     TASK_UNAVAILABLE = "❌ {mention} can't complete their chore this week."
     TASK_REASSIGNED = "**{chore}** odteraz bude robic {mention}."
-    TASK_REASSIGNED_FULL = "{original_mention} can't complete their chore this week.\n**{chore}** has been reassigned to {new_mention}."
+    TASK_REASSIGNED_FULL = "{original_mention} nemoze.\n**{chore}** has been reassigned to {new_mention}."
 
     # Usage instructions
     REACTION_INSTRUCTIONS = (
@@ -101,3 +101,11 @@ class BotStrings:
     NEXT_WEEK_INCLUDED = "✅ {name} has been included in the next chore rotation."
     NEXT_WEEK_EXCLUDED = "❌ {name} has been excluded from the next chore rotation."
     NEXT_WEEK_TOGGLE = "{user} has toggled {name}'s inclusion in the next chore rotation."
+
+    # Multiple completion messages
+    TASK_COMPLETED_BY_HELPER = "✅ {helper_mention} has completed the chore **{chore}** that was assigned to {assignee_mention}! Thank you so much for participating in keeping our flat clean! 🦸"
+    TASK_COMPLETED_ADDITIONAL = "✅ {mention} has also completed the chore **{chore}**! Thank you so much for participating in keeping our flat clean! 🙌"
+
+    # Frequency related messages
+    FREQUENCY_SET = "Frequency for '{chore}' set to {frequency} ({freq_text})."
+    CHORE_ADDED_WITH_FREQUENCY = "Chore '{name}' added successfully. It will appear {freq_text}."

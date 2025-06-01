@@ -64,7 +64,9 @@ class ScheduleManager:
             "rotation_indices": {},
             "voted_flatmates": [],
             "pending_chores": [],
-            "excluded_for_next_rotation": []
+            "excluded_for_next_rotation": [],
+            "last_rotation_week": {},  # Track when each chore was last in rotation
+            "completed_by": {}  # Track who has completed each chore
         }
         return default_data
 
@@ -222,7 +224,7 @@ class ScheduleManager:
         return True
 
     def generate_new_schedule(self):
-        """Generate a new chore schedule using a priority-based system that considers completion statistics."""
+        """Generate a new chore schedule using a priority-based system that considers completion statistics and frequency."""
         logger.info("Generating new chore schedule")
 
         # Store current assignments as previous before generating new ones
@@ -252,12 +254,37 @@ class ScheduleManager:
         flatmates = [f for f in all_active_flatmates if f["name"] not in excluded_flatmates]
         logger.debug(f"Final list of {len(flatmates)} flatmates for schedule generation")
 
-        # Get list of chores
-        chores = self.config_manager.get_chores()
-        logger.debug(f"Found {len(chores)} chores to assign")
+        # Get current week number (for frequency calculation)
+        current_week = datetime.datetime.now().isocalendar()[1]
+        logger.debug(f"Current week number: {current_week}")
 
-        if not flatmates or not chores:
-            logger.warning("Cannot generate schedule: No flatmates or no chores defined")
+        # Get full chore data
+        chores_data = self.config_manager.get_chores_data()
+        logger.debug(f"Got {len(chores_data)} chores with frequency data")
+
+        # Filter chores based on frequency
+        eligible_chores = []
+        for chore in chores_data:
+            chore_name = chore["name"]
+            frequency = chore.get("frequency", 1)
+
+            # Initialize last rotation week if not exists
+            if "last_rotation_week" not in self.schedule_data:
+                self.schedule_data["last_rotation_week"] = {}
+
+            last_week = self.schedule_data["last_rotation_week"].get(chore_name, 0)
+
+            # If frequency is 1 (weekly), always include
+            # If frequency > 1, include if it's been enough weeks since last rotation
+            if frequency == 1 or (current_week - last_week) % frequency == 0:
+                eligible_chores.append(chore_name)
+                # Update last rotation week
+                self.schedule_data["last_rotation_week"][chore_name] = current_week
+
+        logger.debug(f"Eligible chores for this week: {eligible_chores}")
+
+        if not flatmates or not eligible_chores:
+            logger.warning("Cannot generate schedule: No flatmates or no eligible chores")
             return {}
 
         # Reset 'recently_returned' flag for all flatmates
@@ -300,7 +327,7 @@ class ScheduleManager:
         available_flatmates = list(sorted_flatmates)  # Start with all flatmates
 
         # First pass: Try to assign chores avoiding last week's assignments
-        for chore in chores:
+        for chore in eligible_chores:
             logger.debug(f"Assigning chore: {chore}")
 
             # Skip if no flatmates available
@@ -329,7 +356,7 @@ class ScheduleManager:
                 logger.info(f"Assigned '{chore}' to {flatmate['name']} (only available option)")
 
         # Handle any remaining chores (if more chores than flatmates)
-        remaining_chores = [c for c in chores if c not in new_assignments]
+        remaining_chores = [c for c in eligible_chores if c not in new_assignments]
         if remaining_chores:
             logger.debug(f"Processing {len(remaining_chores)} remaining chores")
 
@@ -369,6 +396,10 @@ class ScheduleManager:
         # Initialize pending chores with all chores
         logger.debug(f"Setting pending chores to all {len(new_assignments)} chores")
         self.schedule_data["pending_chores"] = list(new_assignments.keys())
+
+        # Initialize completed_by tracking
+        logger.debug("Initializing completed_by tracking")
+        self.schedule_data["completed_by"] = {chore: [] for chore in new_assignments.keys()}
 
         # Clear exclusions after generating the schedule
         logger.debug("Clearing exclusions after generating schedule")
@@ -742,37 +773,62 @@ class ScheduleManager:
         Returns:
             tuple: (success, message)
         """
-        logger.info(f"Marking chore '{chore}' as completed by {flatmate_name}")
+        logger.info(f"Marking chore '{chore}' as completed by {helper or flatmate_name}")
 
         # Check if chore exists in current assignments
         if chore not in self.schedule_data.get("current_assignments", {}):
             logger.warning(f"Chore '{chore}' not found in current assignments")
             return False, "Chore not found in current assignments"
 
-        # Check if assigned to the correct flatmate
-        if self.schedule_data["current_assignments"][chore] != flatmate_name:
-            logger.warning(f"Chore '{chore}' is not assigned to {flatmate_name}")
-            return False, f"This chore is assigned to {self.schedule_data['current_assignments'][chore]}, not {flatmate_name}"
-
         # Check if the chore is still pending
         if chore not in self.schedule_data.get("pending_chores", []):
-            logger.warning(f"Chore '{chore}' is already marked as completed")
-            return False, "This chore is already marked as completed"
+            # Allow multiple completions - check if this person has already completed it
+            completed_by = self.schedule_data.get("completed_by", {}).get(chore, [])
+            completer = helper or flatmate_name
 
-        # Remove from pending chores
+            if completer in completed_by:
+                logger.warning(f"Chore '{chore}' already marked as completed by {completer}")
+                return False, f"You've already completed this chore"
+
+            # Allow another person to mark it as completed again
+            logger.info(f"Chore '{chore}' already completed, but allowing {completer} to mark it again")
+
+            # Track who completed it
+            if "completed_by" not in self.schedule_data:
+                self.schedule_data["completed_by"] = {}
+            if chore not in self.schedule_data["completed_by"]:
+                self.schedule_data["completed_by"][chore] = []
+
+            self.schedule_data["completed_by"][chore].append(completer)
+
+            # Update statistics for the helper
+            self.config_manager.update_flatmate_stats(completer, "completed")
+
+            # Save updated data
+            self._save_schedule_data()
+            logger.info(f"Chore '{chore}' marked as completed by {completer} (additional completion)")
+
+            return True, "Chore marked as completed (additional)"
+
+        # First completion - remove from pending chores
         self.schedule_data["pending_chores"].remove(chore)
         logger.debug(f"Removed chore '{chore}' from pending chores")
 
-        # Update statistics for the assigned flatmate
-        self.config_manager.update_flatmate_stats(flatmate_name, "completed")
+        # Initialize completed_by tracking if not exists
+        if "completed_by" not in self.schedule_data:
+            self.schedule_data["completed_by"] = {}
+        if chore not in self.schedule_data["completed_by"]:
+            self.schedule_data["completed_by"][chore] = []
 
-        # If a helper completed the chore, update their statistics too
-        if helper and helper != flatmate_name:
-            logger.info(f"Helper {helper} completed chore for {flatmate_name}")
-            self.config_manager.update_flatmate_stats(helper, "completed")
+        # Track who completed it
+        completer = helper or flatmate_name
+        self.schedule_data["completed_by"][chore].append(completer)
+
+        # Update statistics for the completer
+        self.config_manager.update_flatmate_stats(completer, "completed")
 
         # Save updated data
         self._save_schedule_data()
-        logger.info(f"Chore '{chore}' marked as completed successfully")
+        logger.info(f"Chore '{chore}' marked as completed successfully by {completer}")
 
         return True, "Chore marked as completed"
