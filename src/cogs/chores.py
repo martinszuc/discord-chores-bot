@@ -67,8 +67,6 @@ class ChoresCog(commands.Cog):
         # If detailed is True, also post individual assignment messages with reactions
         if detailed:
             logger.debug("Posting detailed schedule with individual messages")
-            await interaction.followup.send("Posting detailed assignment messages...")
-
             # Get the chores channel to post in
             channel = interaction.channel
             logger.debug(f"Using channel for detailed messages: {channel.name} (ID: {channel.id})")
@@ -106,7 +104,6 @@ class ChoresCog(commands.Cog):
                 self.message_cache[message.id] = (chore, flatmate_name)
 
             logger.info(f"Posted detailed schedule with {msg_count} individual messages")
-            await interaction.followup.send(f"✅ Posted {msg_count} assignment messages with reaction buttons")
 
     @chores.command(name="next")
     @app_commands.checks.has_permissions(manage_messages=True)
