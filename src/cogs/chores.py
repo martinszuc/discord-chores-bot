@@ -371,7 +371,7 @@ class ChoresCog(commands.Cog):
         # Validate difficulty level
         if difficulty < 1 or difficulty > 5:
             logger.warning(f"Invalid difficulty level: {difficulty}")
-            await interaction.response.send_message("Difficulty must be between 1 and 5.")
+            await interaction.response.send_message(BotStrings.ERR_DIFFICULTY_RANGE)
             return
 
         success, message = self.config_manager.set_chore_difficulty(chore, difficulty)
@@ -392,7 +392,7 @@ class ChoresCog(commands.Cog):
         # Check if the chore exists
         if chore not in self.config_manager.get_chores():
             logger.warning(f"Chore not found: {chore}")
-            await interaction.response.send_message("Chore not found.")
+            await interaction.response.send_message(BotStrings.CHORE_NOT_FOUND)
             return
 
         # Create an embed for the vote
@@ -408,7 +408,7 @@ class ChoresCog(commands.Cog):
         logger.debug(f"Vote difficulty instructions sent for chore: {chore}")
 
         # Send a message that users can react to
-        message = await interaction.channel.send(f"Vote on the difficulty of **{chore}**:")
+        message = await interaction.channel.send(BotStrings.DIFFICULTY_VOTE_MESSAGE.format(chore=chore))
         logger.debug(f"Vote message sent, ID: {message.id}")
 
         # Add reaction emojis
@@ -471,11 +471,15 @@ class ChoresCog(commands.Cog):
 
                 # Announce the result
                 await interaction.channel.send(
-                    BotStrings.DIFFICULTY_VOTE_RESULT.format(chore=chore, level=average_difficulty)
+                    BotStrings.DIFFICULTY_VOTE_RESULT_SUCCESS.format(
+                        chore=chore,
+                        level=average_difficulty,
+                        votes=total_votes
+                    )
                 )
             else:
                 logger.warning(f"No votes were cast for chore: {chore}")
-                await interaction.channel.send(f"No votes were cast for **{chore}**.")
+                await interaction.channel.send(BotStrings.ERR_NO_VOTES_CAST.format(chore=chore))
 
             # Remove from cache
             self.difficulty_vote_cache.pop(message.id, None)
@@ -483,10 +487,10 @@ class ChoresCog(commands.Cog):
 
         except discord.errors.NotFound:
             logger.error(f"Message {message.id} not found, possibly deleted")
-            await interaction.channel.send(f"The vote message for **{chore}** was deleted.")
+            await interaction.channel.send(BotStrings.ERR_VOTE_MESSAGE_DELETED.format(chore=chore))
         except Exception as e:
             logger.error(f"Error processing difficulty vote: {e}", exc_info=True)
-            await interaction.channel.send(f"There was an error processing the vote for **{chore}**.")
+            await interaction.channel.send(BotStrings.ERR_VOTE_PROCESSING.format(chore=chore))
 
     @chores.command(name="next_week")
     async def next_week_planning(self, interaction: discord.Interaction):
@@ -506,9 +510,8 @@ class ChoresCog(commands.Cog):
 
         # Create embed for display
         embed = discord.Embed(
-            title="🗓️ Next Week's Chore Rotation Planning",
-            description="Below are the flatmates who will be included in next week's chore rotation.\n"
-                        "React with the number beside a flatmate to toggle their inclusion/exclusion.",
+            title=BotStrings.NEXT_WEEK_PLANNING_TITLE,
+            description=BotStrings.NEXT_WEEK_PLANNING_DESC,
             color=discord.Color.blue(),
             timestamp=datetime.datetime.now()
         )
@@ -526,7 +529,7 @@ class ChoresCog(commands.Cog):
             is_excluded = flatmate["name"] in excluded_flatmates
 
             # For each flatmate, show their status
-            status = "❌ Excluded from next rotation" if is_excluded else "✅ Included in next rotation"
+            status = BotStrings.NEXT_WEEK_STATUS_EXCLUDED if is_excluded else BotStrings.NEXT_WEEK_STATUS_INCLUDED
             logger.debug(f"Flatmate {flatmate['name']} status: {status}")
 
             embed.add_field(
@@ -537,9 +540,8 @@ class ChoresCog(commands.Cog):
 
         # Add instructions
         embed.add_field(
-            name="Instructions",
-            value="React with the number next to a flatmate to toggle their inclusion/exclusion.\n"
-                  "Changes will apply to the next schedule generation.",
+            name=BotStrings.NEXT_WEEK_INSTRUCTIONS_TITLE,
+            value=BotStrings.NEXT_WEEK_INSTRUCTIONS_DESC,
             inline=False
         )
 
@@ -577,14 +579,18 @@ class ChoresCog(commands.Cog):
         # Validate frequency
         if frequency < 1:
             logger.warning(f"Invalid frequency: {frequency}")
-            await interaction.response.send_message("Frequency must be at least 1.")
+            await interaction.response.send_message(BotStrings.ERR_FREQUENCY_MINIMUM)
             return
 
         success, message = self.config_manager.set_chore_frequency(chore, frequency)
         if success:
             freq_text = "weekly" if frequency == 1 else f"every {frequency} weeks"
             logger.info(f"Frequency for chore '{chore}' set to {frequency} ({freq_text})")
-            await interaction.response.send_message(f"Frequency for '{chore}' set to {frequency} ({freq_text}).")
+            await interaction.response.send_message(BotStrings.FREQUENCY_UPDATED.format(
+                chore=chore,
+                frequency=frequency,
+                freq_text=freq_text
+            ))
         else:
             logger.warning(f"Failed to set frequency: {message}")
             await interaction.response.send_message(message)
@@ -601,14 +607,17 @@ class ChoresCog(commands.Cog):
         # Validate frequency
         if frequency < 1:
             logger.warning(f"Invalid frequency: {frequency}")
-            await interaction.response.send_message("Frequency must be at least 1.")
+            await interaction.response.send_message(BotStrings.ERR_FREQUENCY_MINIMUM)
             return
 
         success, message = self.config_manager.add_chore(name, frequency)
         if success:
             freq_text = "weekly" if frequency == 1 else f"every {frequency} weeks"
             logger.info(f"Added chore '{name}' with frequency {frequency} ({freq_text})")
-            await interaction.response.send_message(f"Chore '{name}' added successfully. It will appear {freq_text}.")
+            await interaction.response.send_message(BotStrings.CHORE_ADDED_SUCCESS.format(
+                name=name,
+                freq_text=freq_text
+            ))
         else:
             logger.warning(f"Failed to add chore: {message}")
             await interaction.response.send_message(message)
@@ -886,7 +895,7 @@ class ChoresCog(commands.Cog):
                 logger.debug(f"Flatmate {flatmate['name']} has already completed this chore, ignoring")
                 await message.remove_reaction(payload.emoji, user)
                 await channel.send(
-                    f"{user.mention} You've already completed this chore.",
+                    f"{user.mention} {BotStrings.ERR_CHORE_ALREADY_COMPLETED}",
                     delete_after=10
                 )
                 return
@@ -929,10 +938,17 @@ class ChoresCog(commands.Cog):
                     # Check if this is an additional completion
                     if "additional" in message_text:
                         # Additional completion message
-                        helper_msg = f"✅ {user.mention} has also completed the chore **{chore}**! Thank you so much for participating in keeping our flat clean! 🙌"
+                        helper_msg = BotStrings.TASK_COMPLETED_ADDITIONAL_ALT.format(
+                            mention=user.mention,
+                            chore=chore
+                        )
                     else:
                         # First completion by helper
-                        helper_msg = f"✅ {user.mention} has completed the chore **{chore}** that was assigned to {assigned_mention}! Thank you so much for participating in keeping our flat clean! 🦸"
+                        helper_msg = BotStrings.TASK_COMPLETED_BY_HELPER_ALT.format(
+                            mention=user.mention,
+                            chore=chore,
+                            assigned_mention=assigned_mention
+                        )
 
                     await channel.send(helper_msg)
                     logger.info(f"Chore '{chore}' completed by {flatmate['name']} for {assigned_flatmate_name}")
@@ -950,7 +966,7 @@ class ChoresCog(commands.Cog):
                 logger.warning(f"User {user.name} tried to mark someone else's chore as unavailable")
                 await message.remove_reaction(payload.emoji, user)
                 await channel.send(
-                    f"{user.mention} You can only mark your own assigned chores as unavailable.",
+                    f"{user.mention} {BotStrings.ERR_ONLY_OWN_CHORE_UNAVAILABLE}",
                     delete_after=10
                 )
                 return
@@ -1020,7 +1036,7 @@ class ChoresCog(commands.Cog):
         # Skip if not a tracked message
         if not hasattr(self,
                        'next_week_planning_cache') or not self.next_week_planning_cache or self.next_week_planning_cache.get(
-                "message_id") != payload.message_id:
+            "message_id") != payload.message_id:
             logger.debug("Not a tracked planning message, skipping")
             return
 
@@ -1085,7 +1101,10 @@ class ChoresCog(commands.Cog):
                 logger.info(f"Including flatmate {selected_flatmate} in next rotation")
                 self.schedule_manager.include_in_next_rotation(selected_flatmate)
                 await channel.send(
-                    f"{user.mention} has included {selected_flatmate} in the next chore rotation.",
+                    BotStrings.NEXT_WEEK_INCLUDED_MSG.format(
+                        user=user.mention,
+                        flatmate=selected_flatmate
+                    ),
                     delete_after=5
                 )
             else:
@@ -1093,7 +1112,10 @@ class ChoresCog(commands.Cog):
                 logger.info(f"Excluding flatmate {selected_flatmate} from next rotation")
                 self.schedule_manager.exclude_from_next_rotation(selected_flatmate)
                 await channel.send(
-                    f"{user.mention} has excluded {selected_flatmate} from the next chore rotation.",
+                    BotStrings.NEXT_WEEK_EXCLUDED_MSG.format(
+                        user=user.mention,
+                        flatmate=selected_flatmate
+                    ),
                     delete_after=5
                 )
 
@@ -1119,9 +1141,8 @@ class ChoresCog(commands.Cog):
 
         # Create updated embed
         embed = discord.Embed(
-            title="🗓️ Next Week's Chore Rotation Planning",
-            description="Below are the flatmates who will be included in next week's chore rotation.\n"
-                        "React with the corresponding number to toggle inclusion/exclusion.",
+            title=BotStrings.NEXT_WEEK_PLANNING_TITLE,
+            description=BotStrings.NEXT_WEEK_PLANNING_DESC,
             color=discord.Color.blue(),
             timestamp=datetime.datetime.now()
         )
@@ -1139,7 +1160,7 @@ class ChoresCog(commands.Cog):
             is_excluded = flatmate["name"] in excluded_flatmates
 
             # Determine status
-            status = "❌ Excluded from next rotation" if is_excluded else "✅ Included in next rotation"
+            status = BotStrings.NEXT_WEEK_STATUS_EXCLUDED if is_excluded else BotStrings.NEXT_WEEK_STATUS_INCLUDED
             logger.debug(f"Flatmate {flatmate['name']} status: {status}")
 
             embed.add_field(
@@ -1150,9 +1171,8 @@ class ChoresCog(commands.Cog):
 
         # Add instructions
         embed.add_field(
-            name="Instructions",
-            value="React with the number next to a flatmate to toggle their inclusion/exclusion.\n"
-                  "Changes will apply to the next schedule generation.",
+            name=BotStrings.NEXT_WEEK_INSTRUCTIONS_TITLE,
+            value=BotStrings.NEXT_WEEK_INSTRUCTIONS_DESC,
             inline=False
         )
 

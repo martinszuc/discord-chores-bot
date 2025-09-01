@@ -110,3 +110,33 @@ class BotStrings:
     # Frequency related messages
     FREQUENCY_SET = "Frequency fi '{chore}' set to {frequency} ({freq_text}) - plan it out proper!"
     CHORE_ADDED_WITH_FREQUENCY = "Chore '{name}' add successful. It gonna show up {freq_text} - nuh worry, wi nah forget!"
+
+    ERR_CHORE_ALREADY_COMPLETED = "Yuh done complete dis chore already, mon."
+    ERR_ONLY_OWN_CHORE_UNAVAILABLE = "Yuh can only mark yuh own chores as unavailable, seen?"
+    ERR_DIFFICULTY_RANGE = "Difficulty must be between 1 and 5, bredrin."
+    ERR_FREQUENCY_MINIMUM = "Frequency must be at least 1, mon."
+    ERR_VOTE_MESSAGE_DELETED = "Di vote message fi **{chore}** get deleted, seen."
+    ERR_VOTE_PROCESSING = "Something wrong wid processing di vote fi **{chore}**, mon."
+    ERR_NO_VOTES_CAST = "Nobody vote fi **{chore}** - weh everybody deh?"
+
+    # Next week planning
+    NEXT_WEEK_PLANNING_TITLE = "🗓️ Next Week's Chore Rotation Planning - Plan Fi Tomorrow!"
+    NEXT_WEEK_PLANNING_DESC = "Below are di flatmates who gonna be inna next week's chore rotation.\nReact wid di number beside a flatmate fi toggle dem inclusion/exclusion."
+    NEXT_WEEK_STATUS_EXCLUDED = "❌ Excluded from next rotation"
+    NEXT_WEEK_STATUS_INCLUDED = "✅ Included in next rotation"
+    NEXT_WEEK_INSTRUCTIONS_TITLE = "Instructions"
+    NEXT_WEEK_INSTRUCTIONS_DESC = "React wid di number next to a flatmate fi toggle dem inclusion/exclusion.\nChanges gonna apply to di next schedule generation."
+    NEXT_WEEK_INCLUDED_MSG = "{user} include {flatmate} inna di next chore rotation - welcome back!"
+    NEXT_WEEK_EXCLUDED_MSG = "{user} exclude {flatmate} from di next chore rotation - tek a break!"
+
+    # Difficulty voting
+    DIFFICULTY_VOTE_MESSAGE = "Vote pon di difficulty of **{chore}** - mek wi know how hard it is:"
+    DIFFICULTY_VOTE_RESULT_SUCCESS = "Di difficulty fi **{chore}** now set to {level}/5 based on {votes} votes - democracy work!"
+
+    # Multiple completion messages (updated)
+    TASK_COMPLETED_BY_HELPER_ALT = "✅ Big up {mention}! Dem complete di chore **{chore}** dat was assigned to {assigned_mention}! Thank yuh fi keeping wi place clean! 🦸"
+    TASK_COMPLETED_ADDITIONAL_ALT = "✅ {mention} also complete di chore **{chore}**! Thank yuh fi going above and beyond! 🙌"
+
+    # Frequency messages
+    FREQUENCY_UPDATED = "Frequency fi '{chore}' set to {frequency} ({freq_text}) - plan out proper!"
+    CHORE_ADDED_SUCCESS = "Chore '{name}' add successful. It gonna appear {freq_text} - wi nah forget!"
