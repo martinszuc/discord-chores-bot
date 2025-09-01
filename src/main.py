@@ -2,6 +2,7 @@ import asyncio
 import datetime
 import json
 import logging
+import os
 from pathlib import Path
 
 import discord
@@ -41,6 +42,28 @@ def load_config():
         raise
 
 
+def get_bot_token(config):
+    """Get bot token from environment variable or config file."""
+    logger.info("Getting bot token")
+
+    # Try environment variable first (more secure)
+    token = os.getenv('DISCORD_BOT_TOKEN')
+    if token:
+        logger.info("✅ Using Discord token from environment variable")
+        return token
+
+    # Fallback to config file
+    token = config.get("token")
+    if token and token != "YOUR_DISCORD_BOT_TOKEN":
+        logger.info("Using Discord token from config file")
+        return token
+
+    # No valid token found
+    logger.critical(
+        "❌ Bot token not found! Please set DISCORD_BOT_TOKEN environment variable or add token to config.json")
+    return None
+
+
 # Create data directory if it doesn't exist
 def init_data_dir():
     """Initialize data directory for persistent storage."""
@@ -54,9 +77,10 @@ def init_data_dir():
 
 
 class ChoresBot(commands.Bot):
-    def __init__(self, config):
+    def __init__(self, config, token):
         logger.info("Initializing ChoresBot")
         self.config = config
+        self.token = token
         intents = discord.Intents.default()
         intents.message_content = True
         intents.members = True
@@ -133,7 +157,7 @@ class ChoresBot(commands.Bot):
 
     async def on_ready(self):
         """Called when the bot is ready and connected to Discord."""
-        logger.info(f'{self.user} has connected to Discord!')
+        logger.info(f'✅ {self.user} has connected to Discord!')
         logger.info(f'Bot ID: {self.user.id}')
         logger.info(f'Serving {len(self.guilds)} guild(s)')
 
@@ -149,7 +173,7 @@ class ChoresBot(commands.Bot):
                 name=activity_text
             )
         )
-        logger.info("Bot is now fully ready")
+        logger.info("🎉 Bot is now fully ready and operational!")
 
     async def schedule_first_chore_post(self):
         """Schedule the first chore post based on the configured day and time."""
@@ -242,7 +266,7 @@ class ChoresBot(commands.Bot):
 
             # Get the configured day and time
             day_name = reminder_settings.get("day", "Friday")
-            time_str = reminder_settings.get("time", "11:00")
+            time_str = reminder_settings.get("time", "18:00")
             timezone = pytz.timezone(self.config["timezone"])
 
             logger.info(f"Configured reminder schedule: {day_name} at {time_str} ({timezone})")
@@ -321,7 +345,7 @@ class ChoresBot(commands.Bot):
 
 async def main():
     """Main entry point for the bot."""
-    logger.info("Starting Discord Chores Bot")
+    logger.info("🚀 Starting Discord Chores Bot")
 
     # Initialize data directory
     logger.info("Initializing data directory")
@@ -335,9 +359,10 @@ async def main():
         logger.critical(f"Failed to start bot due to configuration error: {e}")
         return
 
-    # Check critical config values
-    if not config.get("token"):
-        logger.critical("Bot token not found in config.json")
+    token = get_bot_token(config)
+    if not token:
+        logger.critical("❌ Cannot start bot without a valid token!")
+        logger.info("💡 Set environment variable: DISCORD_BOT_TOKEN=your_bot_token")
         return
 
     if not config.get("chores_channel_id"):
@@ -346,14 +371,14 @@ async def main():
     # Create the bot
     logger.info("Creating bot instance")
     global bot
-    bot = ChoresBot(config)
+    bot = ChoresBot(config, token)
 
-    # Run the bot with the token from config
-    logger.info("Starting bot...")
+    # Run the bot with the token
+    logger.info("🎬 Starting bot...")
     try:
-        await bot.start(config["token"])
+        await bot.start(token)
     except discord.LoginFailure:
-        logger.critical("Invalid bot token. Please check your configuration.")
+        logger.critical("❌ Invalid bot token. Please check your DISCORD_BOT_TOKEN environment variable.")
     except Exception as e:
         logger.critical(f"Error starting bot: {e}", exc_info=True)
 
