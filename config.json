@@ -74,27 +74,35 @@
     }
   ],
   "chores": [
-    {
-      "name": "Kupelka",
-      "frequency": 1
-    },
-    {
-      "name": "Zachod",
-      "frequency": 1
-    },
-    {
-      "name": "Vysavanie",
-      "frequency": 1
-    },
-    {
-      "name": "Zmyvanie",
-      "frequency": 1
-    },
-    {
-      "name": "Kuchyňa",
-      "frequency": 1
-    }
-  ],
+  {
+    "name": "Kupelka",
+    "frequency": 1
+  },
+  {
+    "name": "Zachod",
+    "frequency": 1
+  },
+  {
+    "name": "Vysavanie",
+    "frequency": 1
+  },
+  {
+    "name": "Zmyvanie",
+    "frequency": 1
+  },
+  {
+    "name": "Kuchyňa",
+    "frequency": 1
+  },
+  {
+    "name": "Sklo",
+    "frequency": 2
+  },
+  {
+    "name": "Odpadky",
+    "frequency": 1
+  }
+],
   "emoji": {
     "completed": "✅",
     "unavailable": "❌",
