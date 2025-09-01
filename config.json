@@ -1,0 +1,119 @@
+{
+  "prefix": "/",
+  "chores_channel_id": 1370734816139415732,
+  "admin_role_id": 123456789012345678,
+  "posting_day": "Monday",
+  "posting_time": "9:00",
+  "timezone": "Europe/Bratislava",
+  "flatmates": [
+    {
+      "name": "Dominik",
+      "discord_id": 816633142161047583,
+      "stats": {
+        "completed": 0,
+        "reassigned": 0,
+        "skipped": 0
+      },
+      "on_vacation": false,
+      "recently_returned": false
+    },
+    {
+      "name": "Roman",
+      "discord_id": 245660735403720704,
+      "stats": {
+        "completed": 0,
+        "reassigned": 0,
+        "skipped": 0
+      },
+      "on_vacation": false,
+      "recently_returned": false
+    },
+    {
+      "name": "Jakub",
+      "discord_id": 534451217577803777,
+      "stats": {
+        "completed": 0,
+        "reassigned": 0,
+        "skipped": 0
+      },
+      "on_vacation": false,
+      "recently_returned": false
+    },
+    {
+      "name": "Denis",
+      "discord_id": 656578693539561473,
+      "stats": {
+        "completed": 0,
+        "reassigned": 0,
+        "skipped": 0
+      },
+      "on_vacation": false,
+      "recently_returned": false
+    },
+    {
+      "name": "Filip",
+      "discord_id": 694965594197590086,
+      "stats": {
+        "completed": 0,
+        "reassigned": 0,
+        "skipped": 0
+      },
+      "on_vacation": false,
+      "recently_returned": false
+    },
+    {
+      "name": "Martin",
+      "discord_id": 667078812265086988,
+      "stats": {
+        "completed": 0,
+        "reassigned": 0,
+        "skipped": 0
+      },
+      "on_vacation": false,
+      "recently_returned": false
+    }
+  ],
+  "chores": [
+    {
+      "name": "Kupelka",
+      "frequency": 1
+    },
+    {
+      "name": "Zachod",
+      "frequency": 1
+    },
+    {
+      "name": "Vysavanie",
+      "frequency": 1
+    },
+    {
+      "name": "Zmyvanie",
+      "frequency": 1
+    },
+    {
+      "name": "Kuchyňa",
+      "frequency": 1
+    }
+  ],
+  "emoji": {
+    "completed": "✅",
+    "unavailable": "❌",
+    "difficulty_1": "1️⃣",
+    "difficulty_2": "2️⃣",
+    "difficulty_3": "3️⃣",
+    "difficulty_4": "4️⃣",
+    "difficulty_5": "5️⃣"
+  },
+  "schedule_data_file": "data/schedule_data.json",
+  "music_celebration": {
+    "enabled": true,
+    "channel_name": "wiz-khalifa",
+    "duration": 30,
+    "volume": 0.5
+  },
+  "reminders": {
+    "enabled": false,
+    "day": "Friday",
+    "time": "18:00"
+  }
+}
