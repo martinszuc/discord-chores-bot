@@ -14,6 +14,9 @@ services:
       - ./music:/app/music
     environment:
       - TZ=Europe/Bratislava
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
+    env_file:
+      - .env
     healthcheck:
       test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
       interval: 1m
