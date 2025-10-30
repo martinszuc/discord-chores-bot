@@ -8,18 +8,37 @@ services:
     image: discord-chores-bot:latest
     container_name: discord-chores-bot
     restart: unless-stopped
+
+    # DNS configuration
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+      - 1.1.1.1
+
     volumes:
       - ./config.json:/app/config.json
       - ./data:/app/data
       - ./music:/app/music
+
     environment:
       - TZ=Europe/Bratislava
       - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
+
     env_file:
       - .env
+
     healthcheck:
       test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
-      interval: 1m
-      timeout: 10s
-      retries: 3
-      start_period: 10s
+      interval: 2m
+      timeout: 30s
+      retries: 5
+      start_period: 30s
+
+    networks:
+      - bot_network
+
+networks:
+  bot_network:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: bot_bridge
