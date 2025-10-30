@@ -9,6 +9,8 @@ import discord
 import pytz
 from discord.ext import commands
 
+from src.utils.connection_handler import ConnectionHandler
+
 # Set up logging
 logging.basicConfig(
     level=logging.INFO,
@@ -21,7 +23,6 @@ logging.basicConfig(
 logger = logging.getLogger('chores-bot')
 
 
-# Load configuration
 def load_config():
     """Load configuration from config.json file."""
     logger.info("Loading configuration from config.json")
@@ -46,25 +47,21 @@ def get_bot_token(config):
     """Get bot token from environment variable or config file."""
     logger.info("Getting bot token")
 
-    # Try environment variable first (more secure)
     token = os.getenv('DISCORD_BOT_TOKEN')
     if token:
         logger.info("✅ Using Discord token from environment variable")
         return token
 
-    # Fallback to config file
     token = config.get("token")
     if token and token != "YOUR_DISCORD_BOT_TOKEN":
         logger.info("Using Discord token from config file")
         return token
 
-    # No valid token found
     logger.critical(
         "❌ Bot token not found! Please set DISCORD_BOT_TOKEN environment variable or add token to config.json")
     return None
 
 
-# Create data directory if it doesn't exist
 def init_data_dir():
     """Initialize data directory for persistent storage."""
     logger.info("Initializing data directory")
@@ -81,20 +78,34 @@ class ChoresBot(commands.Bot):
         logger.info("Initializing ChoresBot")
         self.config = config
         self.token = token
+
+        # Connection tracking
+        self.reconnect_attempts = 0
+        self.max_reconnect_attempts = 10
+        self.last_disconnect_time = None
+        self.is_ready = False
+
+        # Connection handler for monitoring
+        self.connection_handler = None
+
+        # Enhanced intents for better connection stability
         intents = discord.Intents.default()
         intents.message_content = True
         intents.members = True
         intents.reactions = True
+        intents.guilds = True
+        intents.voice_states = True
 
         logger.debug(f"Bot configured with prefix: {config['prefix']}")
 
         super().__init__(
             command_prefix=commands.when_mentioned_or(config["prefix"]),
             intents=intents,
-            help_command=None  # We'll use a custom help command
+            help_command=None,
+            heartbeat_timeout=60.0,  # Increased timeout for unstable connections
+            max_messages=1000  # Limit message cache to reduce memory usage
         )
 
-        # Store the bot start time
         self.launched_at = datetime.datetime.now()
         logger.info(f"Bot initialization completed at {self.launched_at}")
 
@@ -102,50 +113,40 @@ class ChoresBot(commands.Bot):
         """Set up all cogs and scheduled tasks."""
         logger.info("Setting up bot hooks and extensions")
 
-        # Track loaded cogs
         loaded_cogs = []
 
-        # Load all cogs
-        try:
-            await self.load_extension("src.cogs.chores")
-            loaded_cogs.append("chores")
-            logger.info("Loaded chores cog")
-        except Exception as e:
-            logger.error(f"Failed to load chores cog: {e}", exc_info=True)
+        # Load all cogs with error handling
+        cogs = [
+            ("src.cogs.chores", "chores"),
+            ("src.cogs.admin", "admin"),
+            ("src.cogs.help", "help"),
+            ("src.cogs.music", "music")
+        ]
 
-        try:
-            await self.load_extension("src.cogs.admin")
-            loaded_cogs.append("admin")
-            logger.info("Loaded admin cog")
-        except Exception as e:
-            logger.error(f"Failed to load admin cog: {e}", exc_info=True)
-
-        try:
-            await self.load_extension("src.cogs.help")
-            loaded_cogs.append("help")
-            logger.info("Loaded help cog")
-        except Exception as e:
-            logger.error(f"Failed to load help cog: {e}", exc_info=True)
-
-        # Load the music cog
-        try:
-            await self.load_extension("src.cogs.music")
-            loaded_cogs.append("music")
-            logger.info("Loaded music cog")
-        except Exception as e:
-            logger.error(f"Failed to load music cog: {e}", exc_info=True)
+        for cog_path, cog_name in cogs:
+            try:
+                await self.load_extension(cog_path)
+                loaded_cogs.append(cog_name)
+                logger.info(f"Loaded {cog_name} cog")
+            except Exception as e:
+                logger.error(f"Failed to load {cog_name} cog: {e}", exc_info=True)
 
         logger.info(f"Cog loading completed. Loaded cogs: {', '.join(loaded_cogs)}")
 
-        # Schedule the first chore post
+        # Initialize connection handler
+        logger.info("Initializing connection handler")
+        self.connection_handler = ConnectionHandler(self)
+        self.loop.create_task(self.connection_handler.monitor_connection_health())
+        logger.info("Connection monitoring started")
+
+        # Schedule tasks
         logger.info("Creating task for first chore post")
         self.loop.create_task(self.schedule_first_chore_post())
 
-        # Schedule the first reminder
         logger.info("Creating task for first reminder")
         self.loop.create_task(self.schedule_first_reminder())
 
-        # Sync slash commands with Discord
+        # Sync slash commands
         try:
             logger.info("Syncing slash commands with Discord")
             synced = await self.tree.sync()
@@ -164,7 +165,14 @@ class ChoresBot(commands.Bot):
         for guild in self.guilds:
             logger.debug(f"Connected to guild: {guild.name} (ID: {guild.id})")
 
-        # Set bot status
+        # Reset reconnection counter on successful connection
+        self.reconnect_attempts = 0
+        self.is_ready = True
+
+        # Notify connection handler
+        if self.connection_handler:
+            await self.connection_handler.on_connect()
+
         activity_text = f"/choreshelp show"
         logger.info(f"Setting bot activity status to: {activity_text}")
         await self.change_presence(
@@ -175,30 +183,70 @@ class ChoresBot(commands.Bot):
         )
         logger.info("🎉 Bot is now fully ready and operational!")
 
+    async def on_disconnect(self):
+        """Called when bot disconnects from Discord."""
+        self.reconnect_attempts += 1
+        self.last_disconnect_time = datetime.datetime.now()
+        self.is_ready = False
+
+        logger.warning(
+            f"⚠️ Bot disconnected from Discord (attempt {self.reconnect_attempts}/{self.max_reconnect_attempts})")
+
+        # Notify connection handler
+        if self.connection_handler:
+            await self.connection_handler.on_disconnect()
+
+        if self.reconnect_attempts >= self.max_reconnect_attempts:
+            logger.error(f"❌ Max reconnection attempts ({self.max_reconnect_attempts}) reached")
+            logger.error("Bot will restart via Docker/system restart policy")
+
+    async def on_resumed(self):
+        """Called when connection resumes after disconnect."""
+        if self.last_disconnect_time:
+            downtime = datetime.datetime.now() - self.last_disconnect_time
+            logger.info(f"✅ Bot resumed connection to Discord after {downtime.total_seconds():.1f} seconds")
+        else:
+            logger.info("✅ Bot resumed connection to Discord")
+
+        self.reconnect_attempts = 0
+        self.is_ready = True
+
+        # Notify connection handler
+        if self.connection_handler:
+            await self.connection_handler.on_resumed()
+
+    async def on_connect(self):
+        """Called when bot establishes connection to Discord."""
+        logger.info("🔗 Bot connected to Discord gateway")
+
+        # Notify connection handler
+        if self.connection_handler:
+            await self.connection_handler.on_connect()
+
+    async def on_error(self, event_method: str, *args, **kwargs):
+        """Handle errors in event methods."""
+        logger.error(f"Error in event {event_method}", exc_info=True)
+
     async def schedule_first_chore_post(self):
         """Schedule the first chore post based on the configured day and time."""
         logger.info("Scheduling first chore post")
         try:
-            # Get the chores cog
             chores_cog = self.get_cog("ChoresCog")
             if not chores_cog:
                 logger.error("Chores cog not found, cannot schedule chore post")
                 return
 
-            # Get the configured day and time
             day_name = self.config["posting_day"]
             time_str = self.config["posting_time"]
             timezone = pytz.timezone(self.config["timezone"])
 
             logger.info(f"Configured posting schedule: {day_name} at {time_str} ({timezone})")
 
-            # Calculate when the next posting should occur
             now = datetime.datetime.now(timezone)
             days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
             target_day_idx = days.index(day_name)
             current_day_idx = now.weekday()
 
-            # Calculate days until next posting
             days_until = (target_day_idx - current_day_idx) % 7
             if days_until == 0 and now.strftime('%H:%M') > time_str:
                 logger.debug("Today is posting day but time has passed, scheduling for next week")
@@ -208,14 +256,10 @@ class ChoresBot(commands.Bot):
                 f"Current day index: {current_day_idx} ({days[current_day_idx]}), Target day index: {target_day_idx} ({days[target_day_idx]})")
             logger.debug(f"Days until next posting: {days_until}")
 
-            # Parse the posting time
             hour, minute = map(int, time_str.split(':'))
-
-            # Calculate the next posting time
             next_post = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
             next_post = next_post + datetime.timedelta(days=days_until)
 
-            # Calculate seconds until next posting
             seconds_until = (next_post - now).total_seconds()
 
             logger.info(f"Next chore post scheduled for {next_post.strftime('%Y-%m-%d %H:%M:%S %Z')}")
@@ -223,13 +267,11 @@ class ChoresBot(commands.Bot):
 
             if seconds_until < 0:
                 logger.info("Negative wait time detected, skipping immediate posting and scheduling for next week")
-                # Add 1 week to get to the next occurrence
                 next_post = next_post + datetime.timedelta(days=7)
                 seconds_until = (next_post - now).total_seconds()
                 logger.info(
                     f"Rescheduled for {next_post.strftime('%Y-%m-%d %H:%M:%S %Z')}, waiting {seconds_until:.2f} seconds")
 
-            # Schedule the first post
             await asyncio.sleep(seconds_until)
             logger.info("Time to post chore schedule, calling post_schedule")
             await chores_cog.post_schedule()
@@ -240,7 +282,7 @@ class ChoresBot(commands.Bot):
             while True:
                 one_week_seconds = 7 * 24 * 60 * 60
                 logger.info(f"Waiting {one_week_seconds} seconds until next posting")
-                await asyncio.sleep(one_week_seconds)  # Wait one week
+                await asyncio.sleep(one_week_seconds)
                 logger.info("Time for weekly chore schedule posting")
                 await chores_cog.post_schedule()
                 logger.info("Weekly chore schedule posted successfully")
@@ -252,26 +294,22 @@ class ChoresBot(commands.Bot):
         """Schedule the first reminder based on the configured reminder settings."""
         logger.info("Scheduling first reminder")
         try:
-            # Get the chores cog
             chores_cog = self.get_cog("ChoresCog")
             if not chores_cog:
                 logger.error("Chores cog not found, cannot schedule reminders")
                 return
 
-            # Get reminder settings
             reminder_settings = chores_cog.config_manager.get_reminder_settings()
             if not reminder_settings.get("enabled", True):
                 logger.info("Reminders are disabled, not scheduling")
                 return
 
-            # Get the configured day and time
             day_name = reminder_settings.get("day", "Friday")
             time_str = reminder_settings.get("time", "18:00")
             timezone = pytz.timezone(self.config["timezone"])
 
             logger.info(f"Configured reminder schedule: {day_name} at {time_str} ({timezone})")
 
-            # Calculate when the next reminder should occur
             now = datetime.datetime.now(timezone)
             days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
             target_day_idx = days.index(day_name)
@@ -280,7 +318,6 @@ class ChoresBot(commands.Bot):
             logger.debug(
                 f"Current day index: {current_day_idx} ({days[current_day_idx]}), Target day index: {target_day_idx} ({days[target_day_idx]})")
 
-            # Calculate days until next reminder
             days_until = (target_day_idx - current_day_idx) % 7
             if days_until == 0 and now.strftime('%H:%M') > time_str:
                 logger.debug("Today is reminder day but time has passed, scheduling for next week")
@@ -288,23 +325,17 @@ class ChoresBot(commands.Bot):
 
             logger.debug(f"Days until next reminder: {days_until}")
 
-            # Parse the reminder time
             hour, minute = map(int, time_str.split(':'))
-
-            # Calculate the next reminder time
             next_reminder = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
             next_reminder = next_reminder + datetime.timedelta(days=days_until)
 
-            # Calculate seconds until next reminder
             seconds_until = (next_reminder - now).total_seconds()
 
             logger.info(f"Next reminder scheduled for {next_reminder.strftime('%Y-%m-%d %H:%M:%S %Z')}")
             logger.info(f"Waiting {seconds_until:.2f} seconds")
 
-            # Schedule the first reminder
             await asyncio.sleep(seconds_until)
 
-            # Get the chores channel
             channel_id = self.config["chores_channel_id"]
             channel = self.get_channel(channel_id)
 
@@ -320,15 +351,13 @@ class ChoresBot(commands.Bot):
             while True:
                 one_week_seconds = 7 * 24 * 60 * 60
                 logger.info(f"Waiting {one_week_seconds} seconds until next reminder")
-                await asyncio.sleep(one_week_seconds)  # Wait one week
+                await asyncio.sleep(one_week_seconds)
 
-                # Check if reminders are still enabled
                 reminder_settings = chores_cog.config_manager.get_reminder_settings()
                 if not reminder_settings.get("enabled", True):
                     logger.info("Reminders are now disabled, stopping reminder schedule")
                     return
 
-                # Get the chores channel
                 channel_id = self.config["chores_channel_id"]
                 channel = self.get_channel(channel_id)
 
@@ -347,11 +376,8 @@ async def main():
     """Main entry point for the bot."""
     logger.info("🚀 Starting Discord Chores Bot")
 
-    # Initialize data directory
-    logger.info("Initializing data directory")
     init_data_dir()
 
-    # Load configuration
     logger.info("Loading configuration")
     try:
         config = load_config()
@@ -368,12 +394,10 @@ async def main():
     if not config.get("chores_channel_id"):
         logger.warning("Chores channel ID not set in config.json")
 
-    # Create the bot
     logger.info("Creating bot instance")
     global bot
     bot = ChoresBot(config, token)
 
-    # Run the bot with the token
     logger.info("🎬 Starting bot...")
     try:
         await bot.start(token)
