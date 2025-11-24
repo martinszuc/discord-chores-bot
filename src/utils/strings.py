@@ -79,10 +79,12 @@ class BotStrings:
 
     # Statistics
     STATS_HEADER = "📊 **{name} Statisztikái - Hogy teljesít** 📊"
-    STATS_COMPLETED = "Befejezett: {count} házi - respect!"
-    STATS_REASSIGNED = "Átadva neki: {count} házi - segítőkész haver!"
-    STATS_SKIPPED = "Kihagyott: {count} házi - lépj be a játékba!"
-    STATS_COMPLETION_RATE = "Teljesítési arány: {rate}% - {'Király munka!' if rate > 80 else 'Van mit fejleszteni!'}"
+    STATS_COMPLETED = "Befejezett (saját): {count} házi"
+    STATS_HELPED = "Segített másoknak: {count} házi - király vagy! 🦸"
+    STATS_REASSIGNED = "Átadva neki: {count} házi"
+    STATS_SKIPPED = "Kihagyott: {count} házi"
+    STATS_COMPLETION_RATE = "Teljesítési arány: {rate}%"
+    STATS_HELPFULNESS = "Segítőkészség: {helped} extra házi! {'Legenda vagy! 🌟' if helped > 2 else 'Respect!' if helped > 0 else 'Segíts másoknak is!'}"
 
     # Reminders
     REMINDER_HEADER = "⏰ **Házi Emlékeztető - Ne felejtsd el!** ⏰"

@@ -37,7 +37,6 @@ class ConfigManager:
         """Save the current configuration to the config file."""
         logger.info(f"Saving configuration to: {self.config_path}")
         try:
-            # Create parent directory if it doesn't exist
             Path(os.path.dirname(self.config_path)).mkdir(parents=True, exist_ok=True)
 
             with open(self.config_path, 'w', encoding='utf-8') as f:
@@ -116,23 +115,21 @@ class ConfigManager:
         """Add a new flatmate."""
         logger.info(f"Adding new flatmate: {name} with Discord ID: {discord_id}")
 
-        # Check if flatmate with name already exists
         if self.get_flatmate_by_name(name):
             logger.warning(f"Attempted to add flatmate with duplicate name: {name}")
             return False, "Flatmate with this name already exists"
 
-        # Check if flatmate with Discord ID already exists
         if self.get_flatmate_by_discord_id(discord_id):
             logger.warning(f"Attempted to add flatmate with duplicate Discord ID: {discord_id}")
             return False, "Flatmate with this Discord ID already exists"
 
-        # Add the flatmate
         new_flatmate = {
             "name": name,
             "discord_id": discord_id,
             "on_vacation": False,
             "stats": {
                 "completed": 0,
+                "helped": 0,
                 "reassigned": 0,
                 "skipped": 0
             }
@@ -177,16 +174,19 @@ class ConfigManager:
             logger.warning(f"Attempted to update stats for non-existent flatmate: {name}")
             return False, "Flatmate not found"
 
-        # Initialize stats if not present
         if "stats" not in flatmate:
             logger.debug(f"Initializing stats for {name}")
             flatmate["stats"] = {
                 "completed": 0,
+                "helped": 0,
                 "reassigned": 0,
                 "skipped": 0
             }
 
-        # Update the specified stat
+        # Ensure helped stat exists for older configs
+        if "helped" not in flatmate["stats"]:
+            flatmate["stats"]["helped"] = 0
+
         if stat_type in flatmate["stats"]:
             prev_value = flatmate["stats"][stat_type]
             flatmate["stats"][stat_type] += increment
@@ -206,33 +206,45 @@ class ConfigManager:
             logger.warning(f"Attempted to get stats for non-existent flatmate: {name}")
             return None
 
-        # Initialize stats if not present
         if "stats" not in flatmate:
             logger.debug(f"Initializing stats for {name}")
             flatmate["stats"] = {
                 "completed": 0,
+                "helped": 0,
                 "reassigned": 0,
                 "skipped": 0
             }
             self.save_config()
 
+        # Ensure helped stat exists for older configs
+        if "helped" not in flatmate["stats"]:
+            flatmate["stats"]["helped"] = 0
+            self.save_config()
+
         logger.debug(f"Stats for {name}: {flatmate['stats']}")
         return flatmate["stats"]
 
-    def add_chore(self, chore_name):
-        """Add a new chore."""
-        logger.info(f"Adding new chore: {chore_name}")
-        chores = self.get_chores()
-        if chore_name in chores:
-            logger.warning(f"Attempted to add duplicate chore: {chore_name}")
-            return False, "Chore already exists"
+    def add_chore(self, chore_name, frequency=1):
+        """Add a new chore with frequency."""
+        logger.info(f"Adding new chore: {chore_name} with frequency: {frequency}")
 
-        # Add the chore to the list
-        chores.append(chore_name)
-        self.config["chores"] = chores
+        chores_data = self.get_chores_data()
+
+        for chore in chores_data:
+            if chore["name"].lower() == chore_name.lower():
+                logger.warning(f"Attempted to add duplicate chore: {chore_name}")
+                return False, "Chore already exists"
+
+        new_chore = {
+            "name": chore_name,
+            "frequency": frequency
+        }
+
+        chores_data.append(new_chore)
+        self.config["chores"] = chores_data
 
         self.save_config()
-        logger.info(f"Chore added successfully: {chore_name}")
+        logger.info(f"Chore added successfully: {chore_name} (frequency: {frequency})")
         return True, "Chore added successfully"
 
     def get_posting_schedule(self):
@@ -272,7 +284,6 @@ class ConfigManager:
                 "time": "11:00"
             }
 
-        # Update values if provided
         if enabled is not None:
             old_enabled = self.config["reminders"].get("enabled", True)
             self.config["reminders"]["enabled"] = enabled
@@ -316,14 +327,11 @@ class ConfigManager:
         logger.debug("Getting list of chores")
         chores_data = self.config.get("chores", [])
 
-        # Handle both old and new format
         if chores_data and isinstance(chores_data[0], dict):
-            # New format
             chore_names = [chore["name"] for chore in chores_data]
             logger.debug(f"Found {len(chore_names)} chores (new format)")
             return chore_names
         else:
-            # Old format - strings
             logger.debug(f"Found {len(chores_data)} chores (old format)")
             return chores_data
 
@@ -332,9 +340,7 @@ class ConfigManager:
         logger.debug("Getting full chore data")
         chores_data = self.config.get("chores", [])
 
-        # Handle old format
         if chores_data and not isinstance(chores_data[0], dict):
-            # Convert old format to new format
             logger.debug("Converting chores from old to new format")
             chores_data = [{"name": chore, "frequency": 1} for chore in chores_data]
             self.config["chores"] = chores_data
@@ -365,7 +371,7 @@ class ConfigManager:
             return frequency
 
         logger.debug(f"Frequency not found for chore: {name}")
-        return 1  # Default to weekly
+        return 1
 
     def set_chore_frequency(self, name, frequency):
         """Set the frequency of a chore."""
@@ -373,7 +379,6 @@ class ConfigManager:
 
         chores_data = self.get_chores_data()
 
-        # Find the chore
         for chore in chores_data:
             if chore["name"].lower() == name.lower():
                 chore["frequency"] = frequency
@@ -385,39 +390,12 @@ class ConfigManager:
         logger.warning(f"Attempted to set frequency for non-existent chore: {name}")
         return False, "Chore not found"
 
-    def add_chore(self, chore_name, frequency=1):
-        """Add a new chore with frequency."""
-        logger.info(f"Adding new chore: {chore_name} with frequency: {frequency}")
-
-        # Get existing chores
-        chores_data = self.get_chores_data()
-
-        # Check if chore already exists
-        for chore in chores_data:
-            if chore["name"].lower() == chore_name.lower():
-                logger.warning(f"Attempted to add duplicate chore: {chore_name}")
-                return False, "Chore already exists"
-
-        # Add the new chore
-        new_chore = {
-            "name": chore_name,
-            "frequency": frequency
-        }
-
-        chores_data.append(new_chore)
-        self.config["chores"] = chores_data
-
-        self.save_config()
-        logger.info(f"Chore added successfully: {chore_name} (frequency: {frequency})")
-        return True, "Chore added successfully"
-
     def remove_chore(self, chore_name):
         """Remove a chore."""
         logger.info(f"Removing chore: {chore_name}")
 
         chores_data = self.get_chores_data()
 
-        # Find the chore
         for i, chore in enumerate(chores_data):
             if isinstance(chore, dict) and chore["name"].lower() == chore_name.lower():
                 del chores_data[i]
@@ -433,4 +411,21 @@ class ConfigManager:
                 return True, "Chore removed successfully"
 
         logger.warning(f"Attempted to remove non-existent chore: {chore_name}")
+        return False, "Chore not found"
+
+    def set_chore_difficulty(self, chore_name, difficulty):
+        """Set the difficulty of a chore (1-5)."""
+        logger.info(f"Setting difficulty for chore '{chore_name}' to {difficulty}")
+
+        chores_data = self.get_chores_data()
+
+        for chore in chores_data:
+            if chore["name"].lower() == chore_name.lower():
+                chore["difficulty"] = difficulty
+                self.config["chores"] = chores_data
+                self.save_config()
+                logger.info(f"Difficulty for chore '{chore_name}' set to {difficulty}")
+                return True, f"Difficulty for '{chore_name}' set to {difficulty}"
+
+        logger.warning(f"Attempted to set difficulty for non-existent chore: {chore_name}")
         return False, "Chore not found"
