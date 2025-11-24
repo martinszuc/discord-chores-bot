@@ -211,19 +211,13 @@ class ScheduleManager:
 
     def generate_new_schedule(self):
         """
-        Generate a new chore schedule using an improved priority system.
-
-        Priority calculation rewards:
-        - Helping others (positive)
-        - Completing own chores (slightly positive)
-
-        Priority calculation penalizes:
-        - Skipping chores (negative)
-        - Getting reassigned chores (slightly negative)
-        - Having same chore as last week (negative)
+        Generate a new chore schedule using simple rotation.
+        Distributes chores across all flatmates each week.
+        Each chore rotates to the next person in the list.
         """
-        logger.info("Generating new chore schedule with improved priority system")
+        logger.info("Generating new chore schedule with simple rotation")
 
+        # Store current assignments as previous
         current_assignments = self.get_current_assignments()
         if current_assignments:
             logger.debug(f"Storing current assignments as previous: {current_assignments}")
@@ -232,11 +226,7 @@ class ScheduleManager:
         previous_assignments = self.get_previous_assignments()
         logger.debug(f"Previous assignments: {previous_assignments}")
 
-        previous_flatmate_chores = {}
-        for chore, flatmate in previous_assignments.items():
-            previous_flatmate_chores[flatmate] = chore
-        logger.debug(f"Previous flatmate -> chore mapping: {previous_flatmate_chores}")
-
+        # Get active flatmates (not on vacation, not excluded)
         all_active_flatmates = self.config_manager.get_active_flatmates()
         logger.debug(f"Found {len(all_active_flatmates)} active flatmates (not on vacation)")
 
@@ -246,9 +236,15 @@ class ScheduleManager:
         flatmates = [f for f in all_active_flatmates if f["name"] not in excluded_flatmates]
         logger.debug(f"Final list of {len(flatmates)} flatmates for schedule generation")
 
+        if not flatmates:
+            logger.warning("Cannot generate schedule: No flatmates available")
+            return {}
+
+        # Get current week for frequency checks
         current_week = datetime.datetime.now().isocalendar()[1]
         logger.debug(f"Current week number: {current_week}")
 
+        # Determine which chores should appear this week based on frequency
         chores_data = self.config_manager.get_chores_data()
         logger.debug(f"Got {len(chores_data)} chores with frequency data")
 
@@ -268,125 +264,74 @@ class ScheduleManager:
 
         logger.debug(f"Eligible chores for this week: {eligible_chores}")
 
-        if not flatmates or not eligible_chores:
-            logger.warning("Cannot generate schedule: No flatmates or no eligible chores")
+        if not eligible_chores:
+            logger.warning("Cannot generate schedule: No eligible chores for this week")
             return {}
 
+        # Initialize rotation_indices if not present
+        if "rotation_indices" not in self.schedule_data:
+            self.schedule_data["rotation_indices"] = {}
+
+        # For new chores, stagger the starting position
+        for i, chore in enumerate(eligible_chores):
+            if chore not in self.schedule_data["rotation_indices"]:
+                # Stagger: first chore starts at 0, second at 1, etc.
+                self.schedule_data["rotation_indices"][chore] = i % len(flatmates)
+                logger.debug(f"Initializing rotation index for '{chore}' to {i % len(flatmates)}")
+
+        new_assignments = {}
+
+        # Track how many chores each flatmate has been assigned this week
+        flatmate_chore_count = {f["name"]: 0 for f in flatmates}
+
+        # Simple rotation: for each chore, assign to the next person in rotation
+        # This ensures chores are distributed across flatmates each week
+        for i, chore in enumerate(eligible_chores):
+            # Get current rotation index for this chore
+            rotation_index = self.schedule_data["rotation_indices"].get(chore, i % len(flatmates))
+
+            # Ensure the rotation index is within bounds
+            if rotation_index >= len(flatmates):
+                rotation_index = rotation_index % len(flatmates)
+
+            # Assign to the flatmate at this rotation index
+            assigned_flatmate = flatmates[rotation_index]
+            new_assignments[chore] = assigned_flatmate["name"]
+            flatmate_chore_count[assigned_flatmate["name"]] += 1
+
+            logger.info(f"Assigned '{chore}' to {assigned_flatmate['name']} (rotation index: {rotation_index})")
+
+            # Increment rotation index for next week (with wraparound)
+            self.schedule_data["rotation_indices"][chore] = (rotation_index + 1) % len(flatmates)
+
+        logger.info(f"Final assignments: {new_assignments}")
+        logger.debug(f"Chore distribution: {flatmate_chore_count}")
+
+        self.schedule_data["current_assignments"] = new_assignments
+
+        # Reset voted flatmates list
+        logger.debug("Resetting voted flatmates list for new schedule")
+        self.schedule_data["voted_flatmates"] = []
+
+        # Set all chores as pending
+        logger.debug(f"Setting pending chores to all {len(new_assignments)} chores")
+        self.schedule_data["pending_chores"] = list(new_assignments.keys())
+
+        # Initialize completed_by tracking
+        logger.debug("Initializing completed_by tracking")
+        self.schedule_data["completed_by"] = {chore: [] for chore in new_assignments.keys()}
+
+        # Clear exclusions after generating schedule
+        logger.debug("Clearing exclusions after generating schedule")
+        self.clear_next_rotation_exclusions()
+
+        # Clear recently_returned flags
         for flatmate in self.config_manager.get_flatmates():
             if flatmate.get("recently_returned", False):
                 logger.debug(f"Resetting 'recently_returned' flag for {flatmate['name']}")
                 flatmate["recently_returned"] = False
 
         self.config_manager.save_config()
-
-        # IMPROVED PRIORITY CALCULATION
-        flatmate_priorities = []
-        for flatmate in flatmates:
-            name = flatmate["name"]
-            stats = self.config_manager.get_flatmate_stats(name)
-
-            completed = stats.get("completed", 0)
-            helped = stats.get("helped", 0)
-            skipped = stats.get("skipped", 0)
-            reassigned = stats.get("reassigned", 0)
-
-            # Start with base score
-            priority_score = 100
-
-            # REWARDS (increase priority = more likely to get easier/fewer chores)
-            priority_score += helped * 8  # Strong reward for helping others
-            priority_score += completed * 3  # Moderate reward for completing own chores
-
-            # PENALTIES (decrease priority = more likely to get harder/more chores)
-            priority_score -= skipped * 15  # Heavy penalty for skipping
-            priority_score -= reassigned * 5  # Moderate penalty for getting reassigned to you
-
-            # Avoid same chore as last week
-            if name in previous_flatmate_chores:
-                priority_score -= 12
-
-            logger.debug(
-                f"Flatmate {name} priority: {priority_score} "
-                f"(completed:{completed}, helped:{helped}, skipped:{skipped}, reassigned:{reassigned})"
-            )
-            flatmate_priorities.append((flatmate, priority_score))
-
-        # Sort by priority - HIGHEST score gets picked LAST (meaning they get easier/fewer chores)
-        # So we reverse=False to sort ascending, and pick from the FRONT for harder chores
-        sorted_flatmates = [f for f, _ in sorted(flatmate_priorities, key=lambda x: x[1])]
-        logger.debug(f"Flatmates sorted by priority (lowest to highest): {[f['name'] for f in sorted_flatmates]}")
-
-        new_assignments = {}
-        available_flatmates = list(sorted_flatmates)
-
-        # First pass: assign chores avoiding last week's assignments
-        for chore in eligible_chores:
-            logger.debug(f"Assigning chore: {chore}")
-
-            if not available_flatmates:
-                break
-
-            previous_assignee = previous_assignments.get(chore)
-            logger.debug(f"Previous assignee for '{chore}': {previous_assignee}")
-
-            assigned = False
-            for flatmate in available_flatmates[:]:
-                if flatmate["name"] != previous_assignee:
-                    new_assignments[chore] = flatmate["name"]
-                    available_flatmates.remove(flatmate)
-                    logger.info(f"Assigned '{chore}' to {flatmate['name']} (by priority)")
-                    assigned = True
-                    break
-
-            if not assigned and available_flatmates:
-                flatmate = available_flatmates[0]
-                new_assignments[chore] = flatmate["name"]
-                available_flatmates.remove(flatmate)
-                logger.info(f"Assigned '{chore}' to {flatmate['name']} (only available option)")
-
-        # Handle remaining chores (more chores than flatmates)
-        remaining_chores = [c for c in eligible_chores if c not in new_assignments]
-        if remaining_chores:
-            logger.debug(f"Processing {len(remaining_chores)} remaining chores")
-
-            already_assigned = {}
-            for chore, flatmate_name in new_assignments.items():
-                already_assigned[flatmate_name] = already_assigned.get(flatmate_name, 0) + 1
-
-            # Prioritize flatmates with fewest assignments (and lowest priority scores)
-            available_for_extra = [(f, already_assigned.get(f["name"], 0)) for f in sorted_flatmates]
-            available_for_extra.sort(key=lambda x: x[1])
-
-            for chore in remaining_chores:
-                if not available_for_extra:
-                    logger.warning(f"No flatmates available for remaining chore: {chore}")
-                    break
-
-                flatmate, _ = available_for_extra[0]
-                new_assignments[chore] = flatmate["name"]
-                logger.info(f"Assigned remaining chore '{chore}' to {flatmate['name']}")
-
-                for i, (f, count) in enumerate(available_for_extra):
-                    if f["name"] == flatmate["name"]:
-                        available_for_extra[i] = (f, count + 1)
-                        break
-                available_for_extra.sort(key=lambda x: x[1])
-
-        logger.info(f"Final assignments: {new_assignments}")
-        self.schedule_data["current_assignments"] = new_assignments
-
-        logger.debug("Resetting voted flatmates list for new schedule")
-        self.schedule_data["voted_flatmates"] = []
-
-        logger.debug(f"Setting pending chores to all {len(new_assignments)} chores")
-        self.schedule_data["pending_chores"] = list(new_assignments.keys())
-
-        logger.debug("Initializing completed_by tracking")
-        self.schedule_data["completed_by"] = {chore: [] for chore in new_assignments.keys()}
-
-        logger.debug("Clearing exclusions after generating schedule")
-        self.clear_next_rotation_exclusions()
-
         self._save_schedule_data()
         logger.info("New schedule generated and saved successfully")
 
@@ -508,7 +453,7 @@ class ScheduleManager:
         completer = helper or flatmate_name
         self.schedule_data["completed_by"][chore].append(completer)
 
-        # Update stats - CRITICAL CHANGE HERE
+        # Update stats
         if helper:
             # Helper completes for someone else
             logger.info(f"Helper {helper} completed chore for {flatmate_name}")
