@@ -145,6 +145,9 @@ class ChoresBot(commands.Bot):
 
         logger.info("Creating task for first reminder")
         self.loop.create_task(self.schedule_first_reminder())
+        
+        logger.info("Creating task for pre week reminder")
+        self.loop.create_task(self.schedule_pre_week_reminder())
 
         # Sync slash commands
         try:
@@ -370,6 +373,84 @@ class ChoresBot(commands.Bot):
 
         except Exception as e:
             logger.error(f"Error in schedule_first_reminder: {e}", exc_info=True)
+    
+    async def schedule_pre_week_reminder(self):
+        """Schedule pre-week reminders 1 day before the new schedule posts."""
+        logger.info("Scheduling pre-week reminder (1 day before new schedule)")
+        try:
+            chores_cog = self.get_cog("ChoresCog")
+            if not chores_cog:
+                logger.error("Chores cog not found, cannot schedule pre-week reminder")
+                return
+
+            day_name = self.config["posting_day"]
+            time_str = self.config["posting_time"]
+            timezone = pytz.timezone(self.config["timezone"])
+
+            logger.info(f"Configured posting schedule: {day_name} at {time_str} ({timezone})")
+
+            now = datetime.datetime.now(timezone)
+            days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+            target_day_idx = days.index(day_name)
+            current_day_idx = now.weekday()
+
+            # Calculate 1 day before the posting day
+            reminder_day_idx = (target_day_idx - 1) % 7
+            logger.debug(f"Reminder day index: {reminder_day_idx} ({days[reminder_day_idx]})")
+
+            days_until = (reminder_day_idx - current_day_idx) % 7
+            if days_until == 0 and now.strftime('%H:%M') > time_str:
+                logger.debug("Today is reminder day but time has passed, scheduling for next week")
+                days_until = 7
+
+            logger.debug(f"Days until next pre-week reminder: {days_until}")
+
+            hour, minute = map(int, time_str.split(':'))
+            next_reminder = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            next_reminder = next_reminder + datetime.timedelta(days=days_until)
+
+            seconds_until = (next_reminder - now).total_seconds()
+
+            logger.info(f"Next pre-week reminder scheduled for {next_reminder.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+            logger.info(f"Waiting {seconds_until:.2f} seconds")
+
+            if seconds_until < 0:
+                logger.info("Negative wait time detected, scheduling for next week")
+                next_reminder = next_reminder + datetime.timedelta(days=7)
+                seconds_until = (next_reminder - now).total_seconds()
+                logger.info(f"Rescheduled for {next_reminder.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+
+            await asyncio.sleep(seconds_until)
+            
+            channel_id = self.config["chores_channel_id"]
+            channel = self.get_channel(channel_id)
+
+            if channel:
+                logger.info(f"Sending pre-week reminders in channel {channel.name} (ID: {channel_id})")
+                await chores_cog.send_pre_week_reminder(channel)
+                logger.info("Pre-week reminders sent successfully")
+            else:
+                logger.error(f"Chores channel not found: {channel_id}")
+
+            # Schedule weekly pre-week reminders
+            logger.info("Setting up recurring weekly pre-week reminders")
+            while True:
+                one_week_seconds = 7 * 24 * 60 * 60
+                logger.info(f"Waiting {one_week_seconds} seconds until next pre-week reminder")
+                await asyncio.sleep(one_week_seconds)
+
+                channel_id = self.config["chores_channel_id"]
+                channel = self.get_channel(channel_id)
+
+                if channel:
+                    logger.info(f"Sending weekly pre-week reminders in channel {channel.name} (ID: {channel_id})")
+                    await chores_cog.send_pre_week_reminder(channel)
+                    logger.info("Weekly pre-week reminders sent successfully")
+                else:
+                    logger.error(f"Chores channel not found: {channel_id}")
+
+        except Exception as e:
+            logger.error(f"Error in schedule_pre_week_reminder: {e}", exc_info=True)
 
 
 async def main():
