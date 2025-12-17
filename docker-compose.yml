@@ -11,9 +11,18 @@ services:
 
     # DNS configuration
     dns:
-      - 8.8.8.8
-      - 8.8.4.4
-      - 1.1.1.1
+      - 192.168.50.69
+      - 9.9.9.9          # Quad9
+      - 8.8.8.8          # Google
+      - 1.1.1.1          # Cloudflare
+
+    # DNS options for faster failover
+    dns_opt:
+      - ndots:1
+      - timeout:2        # Fail fast if DNS is down
+      - attempts:3       # Try 3 times before moving to next DNS
+
+    dns_search: []       # Prevent unnecessary search domain queries
 
     volumes:
       - ./config.json:/app/config.json
@@ -23,6 +32,7 @@ services:
     environment:
       - TZ=Europe/Bratislava
       - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
+      - PYTHONUNBUFFERED=1
 
     env_file:
       - .env
@@ -34,12 +44,12 @@ services:
       retries: 5
       start_period: 30s
 
-    # Memory limits from local version
+    # Memory limits
     mem_limit: "512m"
     mem_reservation: "256m"
     memswap_limit: "512m"
 
-    # Network configuration for resilience
+    # Network configuration
     networks:
       - bot_network
 
