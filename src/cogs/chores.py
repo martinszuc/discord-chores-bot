@@ -1193,7 +1193,7 @@ async def setup(bot):
     chores_cog = ChoresCog(bot)
     await bot.add_cog(chores_cog)
     # GroupCog automatically registers commands, but let's verify
-    group = chores_cog.app_group
+    group = getattr(chores_cog, 'app_group', None)
     if group:
         logger.debug(f"ChoresCog group registered: {group.name} with {len(group.commands)} commands")
         for cmd in group.commands:
