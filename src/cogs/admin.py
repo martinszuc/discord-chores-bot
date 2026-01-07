@@ -523,4 +523,10 @@ async def setup(bot):
     logger.info("Setting up AdminCog")
     admin_cog = AdminCog(bot)
     await bot.add_cog(admin_cog)
+    # GroupCog automatically registers commands, but let's verify
+    group = admin_cog.app_group
+    if group:
+        logger.debug(f"AdminCog group registered: {group.name} with {len(group.commands)} commands")
+        for cmd in group.commands:
+            logger.debug(f"  - Command: {cmd.name}")
     logger.info("AdminCog setup completed successfully")

@@ -149,10 +149,21 @@ class ChoresBot(commands.Bot):
         # Sync slash commands
         try:
             logger.info("Syncing slash commands with Discord")
+            # Log all commands before sync
+            all_commands = self.tree.get_commands()
+            logger.info(f"Commands in tree before sync: {len(all_commands)}")
+            for cmd in all_commands:
+                if hasattr(cmd, 'commands'):
+                    logger.info(f"  Group: {cmd.name} ({len(cmd.commands)} subcommands)")
+                    for subcmd in cmd.commands:
+                        logger.info(f"    - {subcmd.name}")
+                else:
+                    logger.info(f"  Command: {cmd.name}")
+            
             synced = await self.tree.sync()
             logger.info(f"Synced {len(synced)} slash command(s)")
             for cmd in synced:
-                logger.debug(f"Synced command: {cmd.name}")
+                logger.info(f"Synced command: {cmd.name}")
         except Exception as e:
             logger.error(f"Failed to sync slash commands: {e}", exc_info=True)
 
