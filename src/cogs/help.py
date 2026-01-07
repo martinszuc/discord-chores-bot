@@ -8,7 +8,7 @@ from discord.ext import commands
 logger = logging.getLogger('chores-bot')
 
 
-class HelpCog(commands.GroupCog, group_name="choreshelp"):
+class HelpCog(commands.GroupCog, group=app_commands.Group(name="choreshelp", description="Help commands for the chores bot")):
     def __init__(self, bot):
         logger.info("Initializing HelpCog")
         self.bot = bot

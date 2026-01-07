@@ -13,7 +13,7 @@ from src.utils.strings import BotStrings
 logger = logging.getLogger('chores-bot')
 
 
-class ChoresCog(commands.GroupCog, group_name="chores"):
+class ChoresCog(commands.GroupCog, group=app_commands.Group(name="chores", description="Commands for managing chores")):
     def __init__(self, bot):
         logger.info("Initializing ChoresCog")
         self.bot = bot
@@ -50,16 +50,19 @@ class ChoresCog(commands.GroupCog, group_name="chores"):
         logger.info(
             f"Show schedule command invoked by {interaction.user.name} (ID: {interaction.user.id}), detailed: {detailed}")
 
+        # Defer response immediately to prevent timeout
+        await interaction.response.defer()
+        
         assignments = self.schedule_manager.get_current_assignments()
         if not assignments:
             logger.warning("No current chore assignments found")
-            await interaction.response.send_message(BotStrings.CMD_NO_SCHEDULE)
+            await interaction.followup.send(BotStrings.CMD_NO_SCHEDULE)
             return
 
         # Create an embed to display the schedule
         logger.debug(f"Creating schedule embed with {len(assignments)} assignments")
         embed = self._create_schedule_embed(assignments)
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
         logger.info("Schedule displayed successfully")
 
         # If detailed is True, also post individual assignment messages with reactions
@@ -140,6 +143,9 @@ class ChoresCog(commands.GroupCog, group_name="chores"):
         """Show the current configuration."""
         logger.info(f"Show config command invoked by {interaction.user.name} (ID: {interaction.user.id})")
 
+        # Defer response immediately to prevent timeout
+        await interaction.response.defer()
+
         flatmates = self.config_manager.get_flatmates()
         chores_data = self.config_manager.get_chores_data()
         schedule = self.config_manager.get_posting_schedule()
@@ -200,7 +206,7 @@ class ChoresCog(commands.GroupCog, group_name="chores"):
                 inline=False
             )
 
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
         logger.info("Config displayed successfully")
 
     @app_commands.command(name="add_flatmate")
@@ -306,6 +312,9 @@ class ChoresCog(commands.GroupCog, group_name="chores"):
         """Show statistics for yourself or another flatmate."""
         logger.info(f"Show stats command invoked by {interaction.user.name} (ID: {interaction.user.id}), name: {name}")
 
+        # Defer response immediately to prevent timeout
+        await interaction.response.defer()
+
         # If no name is provided, use the requestor's name
         if not name:
             logger.debug(f"No name provided, using requestor: {interaction.user.name} (ID: {interaction.user.id})")
@@ -313,7 +322,7 @@ class ChoresCog(commands.GroupCog, group_name="chores"):
             if not flatmate:
                 logger.warning(
                     f"User {interaction.user.name} (ID: {interaction.user.id}) is not registered as a flatmate")
-                await interaction.response.send_message("You are not registered as a flatmate.")
+                await interaction.followup.send("You are not registered as a flatmate.")
                 return
             name = flatmate["name"]
             logger.debug(f"Using flatmate name: {name}")
@@ -322,7 +331,7 @@ class ChoresCog(commands.GroupCog, group_name="chores"):
         stats = self.config_manager.get_flatmate_stats(name)
         if not stats:
             logger.warning(f"No statistics found for flatmate: {name}")
-            await interaction.response.send_message(f"No statistics found for {name}.")
+            await interaction.followup.send(f"No statistics found for {name}.")
             return
 
         # Calculate completion rate
@@ -355,7 +364,7 @@ class ChoresCog(commands.GroupCog, group_name="chores"):
             inline=False
         )
 
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
         logger.info(f"Stats displayed successfully for {name}")
 
     @app_commands.command(name="set_difficulty")
@@ -495,11 +504,14 @@ class ChoresCog(commands.GroupCog, group_name="chores"):
         """Show and plan who will be included in next week's chore rotation."""
         logger.info(f"Next week planning command invoked by {interaction.user.name} (ID: {interaction.user.id})")
 
+        # Defer response immediately to prevent timeout
+        await interaction.response.defer()
+
         # Get all flatmates who are not on vacation
         active_flatmates = self.config_manager.get_active_flatmates()
         if not active_flatmates:
             logger.warning("No active flatmates found for planning")
-            await interaction.response.send_message(BotStrings.ERR_NEXT_WEEK_NO_ACTIVE)
+            await interaction.followup.send(BotStrings.ERR_NEXT_WEEK_NO_ACTIVE)
             return
 
         # Get excluded flatmates for next rotation
@@ -544,11 +556,8 @@ class ChoresCog(commands.GroupCog, group_name="chores"):
         )
 
         # Send the message
-        await interaction.response.send_message(embed=embed)
+        message = await interaction.followup.send(embed=embed)
         logger.debug("Next week planning embed sent")
-
-        # Get the sent message for adding reactions
-        message = await interaction.original_response()
         logger.debug(f"Planning message ID: {message.id}")
 
         # Add reactions for each flatmate
