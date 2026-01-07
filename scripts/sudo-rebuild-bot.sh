@@ -1,6 +1,17 @@
 #!/bin/bash
 # Rebuild Discord Bot with Cleanup - with sudo
 # Safely rebuilds the bot image and cleans up old versions
+# Usage: ./sudo-rebuild-bot.sh [--no-cache]
+
+# Check for --no-cache flag
+NO_CACHE_FLAG=""
+if [[ "$1" == "--no-cache" ]]; then
+    NO_CACHE_FLAG="--no-cache"
+    echo "⚠️  Building WITHOUT cache (slower but ensures fresh dependencies)"
+else
+    echo "ℹ️  Building WITH cache (faster, uses cached dependencies)"
+fi
+echo ""
 
 echo "=== Discord Chores Bot - Rebuild with Cleanup ==="
 echo ""
@@ -28,7 +39,11 @@ echo "This will:"
 echo "  1. Stop the current bot"
 echo "  2. Remove old container"
 echo "  3. Remove old images"
-echo "  4. Build fresh image"
+if [[ -z "$NO_CACHE_FLAG" ]]; then
+    echo "  4. Build image (using cached dependencies)"
+else
+    echo "  4. Build image (NO cache - fresh download)"
+fi
 echo "  5. Start bot"
 echo "  6. Clean up"
 echo ""
@@ -57,8 +72,16 @@ echo "Step 3: Removing old bot images..."
 sudo docker images | grep discord-chores-bot | awk '{print $3}' | xargs -r sudo docker rmi -f 2>/dev/null || echo "  (no old images)"
 echo ""
 
-echo "Step 4: Building fresh image..."
-sudo docker-compose build --no-cache
+if [[ -z "$NO_CACHE_FLAG" ]]; then
+    echo "Step 4: Building image (using cached dependencies)..."
+    # Enable BuildKit for cache mounts if available
+    export DOCKER_BUILDKIT=1
+    export COMPOSE_DOCKER_CLI_BUILD=1
+    sudo docker-compose build
+else
+    echo "Step 4: Building image (NO cache - fresh download)..."
+    sudo docker-compose build --no-cache
+fi
 echo ""
 
 echo "Step 5: Starting bot..."

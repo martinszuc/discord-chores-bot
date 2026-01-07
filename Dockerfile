@@ -14,9 +14,12 @@ RUN apt-get update && apt-get install -y \
     ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
-# Install dependencies
+# Install dependencies with pip cache
+# Copy requirements first for better Docker layer caching
+# Uses BuildKit cache mount for faster rebuilds (requires: DOCKER_BUILDKIT=1)
 COPY requirements.txt .
-RUN pip install -r requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --cache-dir=/root/.cache/pip -r requirements.txt
 
 # Create data directory
 RUN mkdir -p /app/data
