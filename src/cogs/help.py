@@ -8,16 +8,14 @@ from discord.ext import commands
 logger = logging.getLogger('chores-bot')
 
 
-class HelpCog(commands.Cog):
+class HelpCog(commands.GroupCog, group_name="choreshelp"):
     def __init__(self, bot):
         logger.info("Initializing HelpCog")
         self.bot = bot
         self.config = bot.config
         logger.debug("HelpCog initialized successfully")
 
-    choreshelp = app_commands.Group(name="choreshelp", description="Help commands for the chores bot")
-
-    @choreshelp.command(name="show")
+    @app_commands.command(name="show")
     @app_commands.describe(command="The specific command to get help with (optional)")
     async def help_command(self, interaction: discord.Interaction, command: str = None):
         """Show help information for the bot."""
@@ -596,10 +594,4 @@ async def setup(bot):
     logger.info("Setting up HelpCog")
     help_cog = HelpCog(bot)
     await bot.add_cog(help_cog)
-    try:
-        logger.debug("Adding choreshelp command group to the bot")
-        bot.tree.add_command(help_cog.choreshelp)
-        logger.info("HelpCog setup completed successfully")
-    except Exception as e:
-        # Command already registered, skip
-        logger.warning(f"Skipping command registration: {e}")
+    logger.info("HelpCog setup completed successfully")

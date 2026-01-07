@@ -12,7 +12,7 @@ from src.utils.strings import BotStrings
 logger = logging.getLogger('chores-bot')
 
 
-class AdminCog(commands.Cog):
+class AdminCog(commands.GroupCog, group_name="choresadmin"):
     def __init__(self, bot):
         logger.info("Initializing AdminCog")
         self.bot = bot
@@ -37,9 +37,7 @@ class AdminCog(commands.Cog):
         logger.debug(f"User {ctx.author.name} has administrator permission: {has_admin_perm}")
         return has_admin_perm
 
-    choresadmin = app_commands.Group(name="choresadmin", description="Administrative commands for the chores bot")
-
-    @choresadmin.command(name="status")
+    @app_commands.command(name="status")
     async def status(self, interaction: discord.Interaction):
         """Show the bot status."""
         logger.info(f"Admin status command invoked by {interaction.user.name} (ID: {interaction.user.id})")
@@ -110,7 +108,7 @@ class AdminCog(commands.Cog):
         await interaction.response.send_message(embed=embed)
         logger.info("Status command executed successfully")
 
-    @choresadmin.command(name="reload_config")
+    @app_commands.command(name="reload_config")
     async def reload_config(self, interaction: discord.Interaction):
         """Reload the bot configuration."""
         logger.info(f"Reload config command invoked by {interaction.user.name} (ID: {interaction.user.id})")
@@ -132,7 +130,7 @@ class AdminCog(commands.Cog):
             logger.error(f"Failed to reload config: {e}", exc_info=True)
             await interaction.response.send_message(BotStrings.ADMIN_CONFIG_FAILED.format(error=e))
 
-    @choresadmin.command(name="test_notification")
+    @app_commands.command(name="test_notification")
     @app_commands.describe(chore="The chore to test notifications for (optional)")
     async def test_notification(self, interaction: discord.Interaction, chore: str = None):
         """Test the notification system by sending a test message."""
@@ -217,7 +215,7 @@ class AdminCog(commands.Cog):
 
             logger.info("All test notifications sent successfully")
 
-    @choresadmin.command(name="test_reminder")
+    @app_commands.command(name="test_reminder")
     async def test_reminder(self, interaction: discord.Interaction):
         """Test the reminder system by sending reminders for all pending chores."""
         logger.info(f"Test reminder command invoked by {interaction.user.name} (ID: {interaction.user.id})")
@@ -234,7 +232,7 @@ class AdminCog(commands.Cog):
         await chores_cog.send_reminders(interaction.channel)
         logger.info("Test reminders sent successfully")
 
-    @choresadmin.command(name="reminders")
+    @app_commands.command(name="reminders")
     @app_commands.describe(
         status="Enable or disable reminders",
         day="Day to send reminders (optional)",
@@ -328,7 +326,7 @@ class AdminCog(commands.Cog):
             logger.error(f"Failed to update reminder settings: {message}")
             await interaction.response.send_message(f"❌ Failed to update reminder settings: {message}")
 
-    @choresadmin.command(name="settings")
+    @app_commands.command(name="settings")
     @app_commands.describe(
         setting="The setting to view or update (optional)",
         value="The new value for the setting (optional)"
@@ -467,7 +465,7 @@ class AdminCog(commands.Cog):
             logger.error(f"Failed to update setting: {e}", exc_info=True)
             await interaction.response.send_message(BotStrings.ADMIN_CONFIG_FAILED.format(error=e))
 
-    @choresadmin.command(name="stats_summary")
+    @app_commands.command(name="stats_summary")
     async def stats_summary(self, interaction: discord.Interaction):
         """Show a summary of stats for all flatmates."""
         logger.info(f"Stats summary command invoked by {interaction.user.name} (ID: {interaction.user.id})")
@@ -525,10 +523,4 @@ async def setup(bot):
     logger.info("Setting up AdminCog")
     admin_cog = AdminCog(bot)
     await bot.add_cog(admin_cog)
-    try:
-        logger.debug("Adding adminchores command group to the bot")
-        bot.tree.add_command(admin_cog.choresadmin)
-        logger.info("AdminCog setup completed successfully")
-    except Exception as e:
-        # Command already registered, skip
-        logger.warning(f"Skipping command registration: {e}")
+    logger.info("AdminCog setup completed successfully")

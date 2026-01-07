@@ -13,7 +13,7 @@ from src.utils.strings import BotStrings
 logger = logging.getLogger('chores-bot')
 
 
-class ChoresCog(commands.Cog):
+class ChoresCog(commands.GroupCog, group_name="chores"):
     def __init__(self, bot):
         logger.info("Initializing ChoresCog")
         self.bot = bot
@@ -43,9 +43,7 @@ class ChoresCog(commands.Cog):
         logger.debug(f"Command channel check result: {result}")
         return result
 
-    chores = app_commands.Group(name="chores", description="Commands for managing chores")
-
-    @chores.command(name="show")
+    @app_commands.command(name="show")
     @app_commands.describe(detailed="Show detailed view with individual assignment messages (default: False)")
     async def show_schedule(self, interaction: discord.Interaction, detailed: bool = False):
         """Show the current chore schedule. Use detailed=True for a more detailed view with reaction buttons."""
@@ -105,7 +103,7 @@ class ChoresCog(commands.Cog):
 
             logger.info(f"Posted detailed schedule with {msg_count} individual messages")
 
-    @chores.command(name="next")
+    @app_commands.command(name="next")
     @app_commands.checks.has_permissions(manage_messages=True)
     async def next_schedule(self, interaction: discord.Interaction):
         """Generate and post the next chore schedule."""
@@ -122,7 +120,7 @@ class ChoresCog(commands.Cog):
         await self.post_schedule(interaction.channel)
         logger.info("New schedule posted successfully with summary")
 
-    @chores.command(name="reset")
+    @app_commands.command(name="reset")
     @app_commands.checks.has_permissions(administrator=True)
     async def reset_schedule(self, interaction: discord.Interaction):
         """Reset the chore rotation."""
@@ -137,7 +135,7 @@ class ChoresCog(commands.Cog):
         self.instructions_sent = False
         logger.info("Schedule reset successfully")
 
-    @chores.command(name="config")
+    @app_commands.command(name="config")
     async def show_config(self, interaction: discord.Interaction):
         """Show the current configuration."""
         logger.info(f"Show config command invoked by {interaction.user.name} (ID: {interaction.user.id})")
@@ -205,7 +203,7 @@ class ChoresCog(commands.Cog):
         await interaction.response.send_message(embed=embed)
         logger.info("Config displayed successfully")
 
-    @chores.command(name="add_flatmate")
+    @app_commands.command(name="add_flatmate")
     @app_commands.describe(name="Flatmate name", discord_id="Discord user ID")
     @app_commands.checks.has_permissions(administrator=True)
     async def add_flatmate(self, interaction: discord.Interaction, name: str, discord_id: str):
@@ -224,7 +222,7 @@ class ChoresCog(commands.Cog):
             logger.warning(f"Invalid Discord ID format: {discord_id}")
             await interaction.response.send_message("Invalid Discord ID. Please provide a valid numeric ID.")
 
-    @chores.command(name="remove_flatmate")
+    @app_commands.command(name="remove_flatmate")
     @app_commands.describe(name="Flatmate name to remove")
     @app_commands.checks.has_permissions(administrator=True)
     async def remove_flatmate(self, interaction: discord.Interaction, name: str):
@@ -236,7 +234,7 @@ class ChoresCog(commands.Cog):
         await interaction.response.send_message(message)
         logger.info(f"Remove flatmate result: {success}, message: {message}")
 
-    @chores.command(name="remove_chore")
+    @app_commands.command(name="remove_chore")
     @app_commands.describe(name="Chore name to remove")
     @app_commands.checks.has_permissions(administrator=True)
     async def remove_chore(self, interaction: discord.Interaction, name: str):
@@ -248,7 +246,7 @@ class ChoresCog(commands.Cog):
         await interaction.response.send_message(message)
         logger.info(f"Remove chore result: {success}, message: {message}")
 
-    @chores.command(name="vacation")
+    @app_commands.command(name="vacation")
     @app_commands.describe(
         status="Enable or disable vacation mode",
         user="The user to set vacation mode for (optional, defaults to yourself)"
@@ -302,7 +300,7 @@ class ChoresCog(commands.Cog):
             logger.warning(f"Failed to update vacation status: {message}")
             await interaction.response.send_message(message)
 
-    @chores.command(name="stats")
+    @app_commands.command(name="stats")
     @app_commands.describe(name="Flatmate name to view stats for (optional)")
     async def show_stats(self, interaction: discord.Interaction, name: str = None):
         """Show statistics for yourself or another flatmate."""
@@ -360,7 +358,7 @@ class ChoresCog(commands.Cog):
         await interaction.response.send_message(embed=embed)
         logger.info(f"Stats displayed successfully for {name}")
 
-    @chores.command(name="set_difficulty")
+    @app_commands.command(name="set_difficulty")
     @app_commands.describe(chore="Chore name", difficulty="Difficulty level (1-5)")
     @app_commands.checks.has_permissions(administrator=True)
     async def set_difficulty(self, interaction: discord.Interaction, chore: str, difficulty: int):
@@ -382,7 +380,7 @@ class ChoresCog(commands.Cog):
             logger.warning(f"Failed to set difficulty: {message}")
             await interaction.response.send_message(message)
 
-    @chores.command(name="vote_difficulty")
+    @app_commands.command(name="vote_difficulty")
     @app_commands.describe(chore="Chore to vote on difficulty")
     async def vote_difficulty(self, interaction: discord.Interaction, chore: str):
         """Start a vote on the difficulty level of a chore."""
@@ -492,7 +490,7 @@ class ChoresCog(commands.Cog):
             logger.error(f"Error processing difficulty vote: {e}", exc_info=True)
             await interaction.channel.send(BotStrings.ERR_VOTE_PROCESSING.format(chore=chore))
 
-    @chores.command(name="next_week")
+    @app_commands.command(name="next_week")
     async def next_week_planning(self, interaction: discord.Interaction):
         """Show and plan who will be included in next week's chore rotation."""
         logger.info(f"Next week planning command invoked by {interaction.user.name} (ID: {interaction.user.id})")
@@ -568,7 +566,7 @@ class ChoresCog(commands.Cog):
             f"Stored planning cache for message ID {message.id} with {len(self.next_week_planning_cache['flatmates'])} flatmates")
         logger.info("Next week planning setup completed")
 
-    @chores.command(name="set_frequency")
+    @app_commands.command(name="set_frequency")
     @app_commands.describe(chore="Chore name", frequency="Frequency (1=weekly, 2=bi-weekly, etc.)")
     @app_commands.checks.has_permissions(administrator=True)
     async def set_frequency(self, interaction: discord.Interaction, chore: str, frequency: int):
@@ -595,7 +593,7 @@ class ChoresCog(commands.Cog):
             logger.warning(f"Failed to set frequency: {message}")
             await interaction.response.send_message(message)
 
-    @chores.command(name="add_chore")
+    @app_commands.command(name="add_chore")
     @app_commands.describe(name="Chore name to add",
                           frequency="How often this chore appears (1=weekly, 2=bi-weekly, etc.)")
     @app_commands.checks.has_permissions(administrator=True)
@@ -1185,9 +1183,4 @@ async def setup(bot):
     logger.info("Setting up ChoresCog")
     chores_cog = ChoresCog(bot)
     await bot.add_cog(chores_cog)
-    try:
-        logger.debug("Adding chores command group to the bot")
-        bot.tree.add_command(chores_cog.chores)
-        logger.info("ChoresCog setup completed successfully")
-    except Exception as e:
-        logger.warning(f"Skipping command registration: {e}")  # Command already registered, skip
+    logger.info("ChoresCog setup completed successfully")
