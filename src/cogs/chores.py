@@ -51,7 +51,14 @@ class ChoresCog(commands.GroupCog, group_name="chores"):
             f"Show schedule command invoked by {interaction.user.name} (ID: {interaction.user.id}), detailed: {detailed}")
 
         # Defer response immediately to prevent timeout
-        await interaction.response.defer()
+        try:
+            await interaction.response.defer()
+        except discord.errors.NotFound:
+            logger.error("Interaction expired before defer could be sent")
+            return
+        except Exception as e:
+            logger.error(f"Error deferring interaction: {e}")
+            return
         
         assignments = self.schedule_manager.get_current_assignments()
         if not assignments:
@@ -144,7 +151,14 @@ class ChoresCog(commands.GroupCog, group_name="chores"):
         logger.info(f"Show config command invoked by {interaction.user.name} (ID: {interaction.user.id})")
 
         # Defer response immediately to prevent timeout
-        await interaction.response.defer()
+        try:
+            await interaction.response.defer()
+        except discord.errors.NotFound:
+            logger.error("Interaction expired before defer could be sent")
+            return
+        except Exception as e:
+            logger.error(f"Error deferring interaction: {e}")
+            return
 
         flatmates = self.config_manager.get_flatmates()
         chores_data = self.config_manager.get_chores_data()
@@ -313,7 +327,14 @@ class ChoresCog(commands.GroupCog, group_name="chores"):
         logger.info(f"Show stats command invoked by {interaction.user.name} (ID: {interaction.user.id}), name: {name}")
 
         # Defer response immediately to prevent timeout
-        await interaction.response.defer()
+        try:
+            await interaction.response.defer()
+        except discord.errors.NotFound:
+            logger.error("Interaction expired before defer could be sent")
+            return
+        except Exception as e:
+            logger.error(f"Error deferring interaction: {e}")
+            return
 
         # If no name is provided, use the requestor's name
         if not name:
@@ -505,7 +526,14 @@ class ChoresCog(commands.GroupCog, group_name="chores"):
         logger.info(f"Next week planning command invoked by {interaction.user.name} (ID: {interaction.user.id})")
 
         # Defer response immediately to prevent timeout
-        await interaction.response.defer()
+        try:
+            await interaction.response.defer()
+        except discord.errors.NotFound:
+            logger.error("Interaction expired before defer could be sent")
+            return
+        except Exception as e:
+            logger.error(f"Error deferring interaction: {e}")
+            return
 
         # Get all flatmates who are not on vacation
         active_flatmates = self.config_manager.get_active_flatmates()
