@@ -12,7 +12,7 @@ from src.utils.strings import BotStrings
 logger = logging.getLogger('chores-bot')
 
 
-class AdminCog(commands.GroupCog, group=app_commands.Group(name="choresadmin", description="Administrative commands for the chores bot")):
+class AdminCog(commands.GroupCog, group_name="choresadmin"):
     def __init__(self, bot):
         logger.info("Initializing AdminCog")
         self.bot = bot
