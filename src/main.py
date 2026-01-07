@@ -99,7 +99,7 @@ class ChoresBot(commands.Bot):
         logger.debug(f"Bot configured with prefix: {config['prefix']}")
 
         super().__init__(
-            command_prefix=commands.when_mentioned_or(config["prefix"]),
+            command_prefix=commands.when_mentioned,  # Only respond to @mentions for prefix commands
             intents=intents,
             help_command=None,
             heartbeat_timeout=60.0,  # Increased timeout for unstable connections
