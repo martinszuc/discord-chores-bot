@@ -30,7 +30,13 @@ class MusicCog(commands.Cog):
         for guild in self.bot.guilds:
             if guild.voice_client:
                 await guild.voice_client.disconnect(force=True)
-                logger.info(f"Cleaned up stale voice connection in {guild.name}")
+                logger.info(f"Cleaned up stale voice client in {guild.name}")
+            else:
+                # Clear any server-side voice state left over from a previous run.
+                # Without this, Discord still thinks the bot is in a channel and
+                # rejects the next connect() with 4006 (session no longer valid).
+                await guild.change_voice_state(channel=None)
+                logger.debug(f"Cleared server-side voice state in {guild.name}")
         self.is_busy = False
 
     async def play_celebration(self, guild):
