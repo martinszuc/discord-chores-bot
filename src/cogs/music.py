@@ -70,10 +70,12 @@ class MusicCog(commands.Cog):
             try:
                 # Disconnect if already connected
                 if guild.voice_client:
-                    await guild.voice_client.disconnect()
-                    await asyncio.sleep(1)
+                    await guild.voice_client.disconnect(force=True)
+                    await asyncio.sleep(2)
 
-                voice_client = await voice_channel.connect()
+                # reconnect=False prevents discord.py retrying with an invalidated
+                # session (4006), which causes an infinite retry loop
+                voice_client = await voice_channel.connect(reconnect=False)
                 logger.info(f"Connected to voice channel: {voice_channel.name}")
 
                 audio_source = discord.FFmpegPCMAudio(file_path)
