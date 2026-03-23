@@ -1,12 +1,20 @@
 #!/bin/bash
 # Rebuild Discord Bot with Cleanup - with sudo
 # Safely rebuilds the bot image and cleans up old versions
-# Usage: ./sudo-rebuild-bot.sh [--no-cache]
+# Usage: ./sudo-rebuild-bot.sh [--no-cache] [-y|--yes]
 
-# Check for --no-cache flag
+# Parse flags
 NO_CACHE_FLAG=""
-if [[ "$1" == "--no-cache" ]]; then
-    NO_CACHE_FLAG="--no-cache"
+AUTO_YES=false
+
+for arg in "$@"; do
+    case $arg in
+        --no-cache) NO_CACHE_FLAG="--no-cache" ;;
+        -y|--yes) AUTO_YES=true ;;
+    esac
+done
+
+if [[ -n "$NO_CACHE_FLAG" ]]; then
     echo "⚠️  Building WITHOUT cache (slower but ensures fresh dependencies)"
 else
     echo "ℹ️  Building WITH cache (faster, uses cached dependencies)"
@@ -49,12 +57,15 @@ echo "  6. Clean up"
 echo ""
 echo "Your data (config.json, data/, music/) will NOT be deleted."
 echo ""
-read -p "Proceed? (yes/no): " -r REPLY
-echo ""
-
-if [[ ! $REPLY =~ ^[Yy][Ee][Ss]$ ]] && [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    echo "Cancelled."
-    exit 0
+if [[ "$AUTO_YES" == true ]]; then
+    echo "Proceeding automatically (-y flag set)."
+else
+    read -p "Proceed? (yes/no): " -r REPLY
+    echo ""
+    if [[ ! $REPLY =~ ^[Yy][Ee][Ss]$ ]] && [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Cancelled."
+        exit 0
+    fi
 fi
 
 # Navigate to bot directory
