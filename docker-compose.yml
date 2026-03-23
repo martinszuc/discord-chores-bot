@@ -10,16 +10,15 @@ services:
 
     # DNS configuration
     dns:
-      - 192.168.50.69
-      - 9.9.9.9          # Quad9
-      - 8.8.8.8          # Google
-      - 1.1.1.1          # Cloudflare
+      - 1.1.1.1
+      - 8.8.8.8
+      - 9.9.9.9
 
     # DNS options for faster failover
     dns_opt:
       - ndots:1
-      - timeout:2        # Fail fast if DNS is down
-      - attempts:3       # Try 3 times before moving to next DNS
+      - timeout:3
+      - attempts:2
 
     dns_search: []       # Prevent unnecessary search domain queries
 

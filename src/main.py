@@ -20,6 +20,17 @@ logging.basicConfig(
         logging.FileHandler('bot.log')
     ]
 )
+class _ReconnectFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        # strip the repeated dns traceback from discord reconnect attempts,
+        # the one-liner message is enough
+        if record.name == "discord.client" and record.exc_info:
+            record.exc_info = None
+        return True
+
+for handler in logging.getLogger().handlers:
+    handler.addFilter(_ReconnectFilter())
+
 logger = logging.getLogger('chores-bot')
 
 

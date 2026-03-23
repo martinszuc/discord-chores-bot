@@ -25,10 +25,22 @@ class MusicCog(commands.Cog):
 
         logger.info(f"MusicCog initialized (enabled: {self.enabled})")
 
+    @commands.Cog.listener()
+    async def on_ready(self):
+        for guild in self.bot.guilds:
+            if guild.voice_client:
+                await guild.voice_client.disconnect(force=True)
+                logger.info(f"Cleaned up stale voice connection in {guild.name}")
+        self.is_busy = False
+
     async def play_celebration(self, guild):
         """Play a random song to celebrate a completed chore."""
         if not self.enabled:
             logger.debug("Music celebration is disabled in config")
+            return
+
+        if not self.bot.is_ready():
+            logger.debug("Skipping celebration, bot not ready")
             return
 
         if self.is_busy:
@@ -109,15 +121,14 @@ class MusicCog(commands.Cog):
         """Force disconnect after maximum duration."""
         try:
             await asyncio.sleep(self.duration)
-
             if voice_client and voice_client.is_connected():
                 if voice_client.is_playing():
                     voice_client.stop()
-                await voice_client.disconnect()
-                logger.info(f"Force disconnected after {self.duration}s timeout")
-                self.is_busy = False
+                await voice_client.disconnect(force=True)
+                logger.info(f"Disconnected after {self.duration}s timeout")
         except Exception as e:
             logger.error(f"Error in disconnect timer: {e}", exc_info=True)
+        finally:
             self.is_busy = False
 
     async def _find_voice_channel(self, guild):
