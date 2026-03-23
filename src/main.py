@@ -131,7 +131,7 @@ class ChoresBot(commands.Bot):
             ("src.cogs.chores", "chores"),
             ("src.cogs.admin", "admin"),
             ("src.cogs.help", "help"),
-            ("src.cogs.music", "music")
+            # ("src.cogs.music", "music")  # disabled until voice networking is resolved
         ]
 
         for cog_path, cog_name in cogs:
