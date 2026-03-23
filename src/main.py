@@ -94,7 +94,7 @@ class ChoresBot(commands.Bot):
         self.reconnect_attempts = 0
         self.max_reconnect_attempts = 10
         self.last_disconnect_time = None
-        self.is_ready = False
+        self.bot_ready = False
 
         # Connection handler for monitoring
         self.connection_handler = None
@@ -189,7 +189,7 @@ class ChoresBot(commands.Bot):
 
         # Reset reconnection counter on successful connection
         self.reconnect_attempts = 0
-        self.is_ready = True
+        self.bot_ready = True
 
         # Notify connection handler
         if self.connection_handler:
@@ -209,7 +209,7 @@ class ChoresBot(commands.Bot):
         """Called when bot disconnects from Discord."""
         self.reconnect_attempts += 1
         self.last_disconnect_time = datetime.datetime.now()
-        self.is_ready = False
+        self.bot_ready = False
 
         logger.warning(
             f"⚠️ Bot disconnected from Discord (attempt {self.reconnect_attempts}/{self.max_reconnect_attempts})")
@@ -231,7 +231,7 @@ class ChoresBot(commands.Bot):
             logger.info("✅ Bot resumed connection to Discord")
 
         self.reconnect_attempts = 0
-        self.is_ready = True
+        self.bot_ready = True
 
         # Notify connection handler
         if self.connection_handler:

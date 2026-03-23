@@ -39,7 +39,7 @@ class MusicCog(commands.Cog):
             logger.debug("Music celebration is disabled in config")
             return
 
-        if not self.bot.is_ready():
+        if not self.bot.bot_ready:
             logger.debug("Skipping celebration, bot not ready")
             return
 
