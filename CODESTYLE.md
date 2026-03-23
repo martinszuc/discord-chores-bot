@@ -6,7 +6,7 @@ This file is for AI agents working on this codebase. Follow these rules strictly
 
 ## Language & Runtime
 
-Python 3.10. discord.py 2.3.2. All async/await patterns. Docker containerized.
+Python 3.12. discord.py 2.3.2. All async/await patterns. Docker containerized.
 
 ---
 
