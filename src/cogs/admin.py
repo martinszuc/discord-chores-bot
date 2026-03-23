@@ -465,6 +465,20 @@ class AdminCog(commands.GroupCog, group_name="choresadmin"):
             logger.error(f"Failed to update setting: {e}", exc_info=True)
             await interaction.response.send_message(BotStrings.ADMIN_CONFIG_FAILED.format(error=e))
 
+    @app_commands.command(name="test_music")
+    async def test_music(self, interaction: discord.Interaction):
+        """Test the music celebration — joins voice, plays a song, then disconnects."""
+        logger.info(f"Test music command invoked by {interaction.user.name} (ID: {interaction.user.id})")
+
+        music_cog = self.bot.get_cog("MusicCog")
+        if not music_cog:
+            await interaction.response.send_message("❌ MusicCog not loaded.")
+            return
+
+        await interaction.response.send_message("🎵 Triggering music celebration test...")
+        await music_cog.play_celebration(interaction.guild)
+        logger.info("Test music command completed")
+
     @app_commands.command(name="stats_summary")
     async def stats_summary(self, interaction: discord.Interaction):
         """Show a summary of stats for all flatmates."""
