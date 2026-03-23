@@ -31,35 +31,10 @@ class MusicCog(commands.Cog):
             if guild.voice_client:
                 await guild.voice_client.disconnect(force=True)
                 logger.info(f"Cleaned up stale voice client in {guild.name}")
-
-            # Always clear server-side voice state. After a hard Docker restart the
-            # local voice_client is None but Discord still sees the bot as connected.
-            # Send the leave and wait for Discord's confirmation event before returning.
-            await self._clear_voice_state(guild)
-            logger.info(f"Cleared server-side voice state in {guild.name}")
-
+            else:
+                await guild.change_voice_state(channel=None)
+                logger.info(f"Cleared server-side voice state in {guild.name}")
         self.is_busy = False
-
-    async def _clear_voice_state(self, guild):
-        """
-        Tell Discord the bot is not in any voice channel, then wait for
-        Discord's VOICE_STATE_UPDATE confirmation before returning.
-        Without waiting, a subsequent connect() races against the leave update
-        and Discord rejects it with 4006 (session no longer valid).
-        """
-        await guild.change_voice_state(channel=None)
-        try:
-            await self.bot.wait_for(
-                "voice_state_update",
-                check=lambda member, before, after: (
-                    member.id == guild.me.id and after.channel is None
-                ),
-                timeout=5.0,
-            )
-        except asyncio.TimeoutError:
-            # Discord didn't echo back a confirmation — proceed anyway.
-            # This can happen if the bot wasn't actually in a channel.
-            logger.debug(f"No voice state confirmation from Discord for {guild.name}, proceeding")
 
     async def play_celebration(self, guild):
         """Play a random song to celebrate a completed chore."""
@@ -96,17 +71,10 @@ class MusicCog(commands.Cog):
             logger.info(f"Selected song for celebration: {random_mp3}")
 
             try:
-                # Disconnect local client if present
                 if guild.voice_client:
                     await guild.voice_client.disconnect(force=True)
+                    await asyncio.sleep(1)
 
-                # Clear server-side voice state and wait for Discord's confirmation
-                # before connecting. Without waiting, connect() fires while Discord
-                # still sees the old session and returns 4006.
-                await self._clear_voice_state(guild)
-
-                # reconnect=False prevents discord.py retrying with an invalidated
-                # session (4006), which causes an infinite retry loop
                 voice_client = await voice_channel.connect(reconnect=False)
                 logger.info(f"Connected to voice channel: {voice_channel.name}")
 
@@ -167,20 +135,17 @@ class MusicCog(commands.Cog):
 
     async def _find_voice_channel(self, guild):
         """Find a suitable voice channel to join."""
-        # Try wiz-khalifa first (note: your config says "wiz-khalifa" but code looks for "ez-khalifa")
         preferred = self.preferred_channel or "wiz-khalifa"
         channel = discord.utils.get(guild.voice_channels, name=preferred)
         if channel:
             logger.debug(f"Found preferred voice channel: {channel.name}")
             return channel
 
-        # Fall back to any channel with members
         for channel in guild.voice_channels:
             if len(channel.members) > 0:
                 logger.debug(f"Found voice channel with members: {channel.name}")
                 return channel
 
-        # Last resort: first available channel
         if guild.voice_channels:
             logger.debug(f"Using first available voice channel: {guild.voice_channels[0].name}")
             return guild.voice_channels[0]
