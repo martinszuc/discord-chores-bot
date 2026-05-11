@@ -519,6 +519,7 @@ class AdminCog(commands.GroupCog, group_name="choresadmin"):
             embed.add_field(
                 name=flatmate["name"],
                 value=f"Completed: {stats['completed']}\n"
+                      f"Helped: {stats.get('helped', 0)}\n"
                       f"Reassigned: {stats['reassigned']}\n"
                       f"Skipped: {stats['skipped']}\n"
                       f"Completion Rate: {completion_rate}%",

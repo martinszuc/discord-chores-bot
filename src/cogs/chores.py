@@ -374,6 +374,7 @@ class ChoresCog(commands.GroupCog, group_name="chores"):
         embed.add_field(
             name="Chores",
             value=BotStrings.STATS_COMPLETED.format(count=stats["completed"]) + "\n" +
+                  BotStrings.STATS_HELPED.format(count=stats.get("helped", 0)) + "\n" +
                   BotStrings.STATS_REASSIGNED.format(count=stats["reassigned"]) + "\n" +
                   BotStrings.STATS_SKIPPED.format(count=stats["skipped"]),
             inline=False
