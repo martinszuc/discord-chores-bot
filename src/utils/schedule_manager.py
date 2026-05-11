@@ -402,7 +402,7 @@ class ScheduleManager:
         Mark a chore as completed.
 
         Updates stats:
-        - If helper: helper gets "helped" stat, assigned flatmate gets "completed" stat
+        - If helper: helper gets "helped" stat only; assigned person gets nothing
         - If no helper: assigned flatmate gets "completed" stat
         """
         logger.info(f"Marking chore '{chore}' as completed by {helper or flatmate_name}")
@@ -428,7 +428,6 @@ class ScheduleManager:
 
             self.schedule_data["completed_by"][chore].append(completer)
 
-            # Update stats based on whether it's a helper or assigned person
             if helper:
                 logger.info(f"Updating HELPED stat for helper: {helper}")
                 self.config_manager.update_flatmate_stats(helper, "helped")
@@ -437,13 +436,10 @@ class ScheduleManager:
                 self.config_manager.update_flatmate_stats(flatmate_name, "completed")
 
             self._save_schedule_data()
-            logger.info(f"Chore '{chore}' marked as completed by {completer} (additional completion)")
-
             return True, "Chore marked as completed (additional)"
 
         # First completion
         self.schedule_data["pending_chores"].remove(chore)
-        logger.debug(f"Removed chore '{chore}' from pending chores")
 
         if "completed_by" not in self.schedule_data:
             self.schedule_data["completed_by"] = {}
@@ -453,23 +449,15 @@ class ScheduleManager:
         completer = helper or flatmate_name
         self.schedule_data["completed_by"][chore].append(completer)
 
-        # Update stats
         if helper:
-            # Helper completes for someone else
+            # helper did the work — only they get credit
             logger.info(f"Helper {helper} completed chore for {flatmate_name}")
-            logger.info(f"Updating HELPED stat for helper: {helper}")
             self.config_manager.update_flatmate_stats(helper, "helped")
-
-            # Assigned person still gets credit for completed
-            logger.info(f"Updating COMPLETED stat for assigned: {flatmate_name}")
-            self.config_manager.update_flatmate_stats(flatmate_name, "completed")
         else:
-            # Person completed their own chore
-            logger.info(f"Updating COMPLETED stat for assigned: {flatmate_name}")
             self.config_manager.update_flatmate_stats(flatmate_name, "completed")
 
         self._save_schedule_data()
-        logger.info(f"Chore '{chore}' marked as completed successfully by {completer}")
+        logger.info(f"Chore '{chore}' marked as completed by {completer}")
 
         return True, "Chore marked as completed"
 
