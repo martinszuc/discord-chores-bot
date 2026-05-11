@@ -294,8 +294,21 @@ class ScheduleManager:
             if rotation_index >= len(flatmates):
                 rotation_index = rotation_index % len(flatmates)
 
-            # Assign to the flatmate at this rotation index
-            assigned_flatmate = flatmates[rotation_index]
+            # Walk forward to find a flatmate without a chore this week
+            attempts = 0
+            while flatmates[rotation_index % len(flatmates)]["name"] in new_assignments.values():
+                rotation_index += 1
+                attempts += 1
+                if attempts >= len(flatmates):
+                    # More chores than flatmates — assign to whoever has done the least
+                    # historically (completed + helped), so heavy contributors get a break
+                    def _effort(idx):
+                        s = self.config_manager.get_flatmate_stats(flatmates[idx]["name"]) or {}
+                        return s.get("completed", 0) + s.get("helped", 0)
+                    rotation_index = min(range(len(flatmates)), key=_effort)
+                    break
+
+            assigned_flatmate = flatmates[rotation_index % len(flatmates)]
             new_assignments[chore] = assigned_flatmate["name"]
             flatmate_chore_count[assigned_flatmate["name"]] += 1
 
